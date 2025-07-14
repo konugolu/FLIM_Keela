@@ -719,7 +719,22 @@ class LifetimeFittingGUI:
         self.last_fit_shift = time_shift_ns
         self.last_fit_chi2 = reduced_pearson_chi2
 
-        
+
+
+# -------------- TMF8828 Raspberry Pi Class --------------
+class TMF8828RaspberryPiGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.winfo_toplevel().title("TMF8828 Raspberry Pi Measurement")
+
+        self.frame = ttk.Frame(root)
+        self.frame.pack(fill="both", expand=True)
+
+        # Placeholder for future implementation
+        tk.Label(self.frame, text="TMF8828 Raspberry Pi Measurement will be implemented here.").pack(pady=20)
+        tk.Button(self.frame, text="Back to Main", command=self.root.destroy).pack(pady=10)
+
+    
 # -------------- Main Application --------------
 class MainApp:
     def __init__(self, root):
@@ -729,13 +744,17 @@ class MainApp:
         notebook = ttk.Notebook(root)
         self.picoharp_tab = ttk.Frame(notebook)
         self.lifetime_tab = ttk.Frame(notebook)
+        self.tmf8828_rasp_tab = ttk.Frame(notebook)
 
         notebook.add(self.picoharp_tab, text="PicoHarp Measurement")
         notebook.add(self.lifetime_tab, text="Lifetime Fitting")
+        notebook.add(self.tmf8828_rasp_tab, text="TMF8828 Raspberry Pi Measurement")
         notebook.pack(expand=True, fill="both")
 
         PicoHarpGUI(self.picoharp_tab)
         LifetimeFittingGUI(self.lifetime_tab)
+        TMF8828RaspberryPiGUI(self.tmf8828_rasp_tab)
+
 
 #Run app
 root = tk.Tk()
