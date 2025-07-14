@@ -745,6 +745,8 @@ class TMF8828RaspberryPiGUI:
         self.start_reader_button = tk.Button(self.frame, text="Connect", command=self.start_reader)
         self.start_reader_button.pack(pady=10)
 
+        self.build_channel_selector()
+
         self.fig, self.ax = plt.subplots()
         self.bars = self.ax.bar(np.arange(128), np.zeros(128))
         self.ax.set_ylim(0, 100)
@@ -772,6 +774,55 @@ class TMF8828RaspberryPiGUI:
                 except Exception as e:
                     print(f"Error: {e}")
         self.root.after(100, self.update_plot)
+    
+    def build_channel_selector(self):
+        self.channel_frame = tk.LabelFrame(self.frame, text="TDC Channel", padx=5, pady=5, bg="white")
+        self.channel_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Canvas and scrollbar setup
+        canvas = tk.Canvas(self.channel_frame, height=120, bg="white")
+        scrollbar = tk.Scrollbar(self.channel_frame, orient="vertical", command=canvas.yview)
+        self.inner_frame = tk.Frame(canvas, bg="white")
+        self.inner_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=self.inner_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # apply button to update the selected channels
+        apply_btn = tk.Button(self.inner_frame, text="Apply", command=self.apply_selected_channels, bg="white", fg="black")
+        apply_btn.pack(pady=(10, 0))
+        
+        # Checkboxes for channels
+        self.channel_vars = []
+        for i in range(10):
+            var = tk.IntVar()
+            chk = tk.Checkbutton(self.inner_frame, text=f"Channel {i}", variable=var, bg="white")
+            chk.pack(anchor="w")
+            self.channel_vars.append(var)
+
+    def destroy_channel_selector(self):
+        """Destroys the channel selector frame and its widgets"""
+        for widget in self.channel_frame.winfo_children():
+            widget.destroy()
+        self.channel_frame.destroy()
+
+    def get_selected_channels(self):
+        """Returns a list of selected channel numbers"""
+        return [i for i, var in enumerate(self.channel_vars) if var.get()]
+    
+    def apply_selected_channels(self):
+        """Updates the selected channels"""
+        self.selected_channels.clear()
+        self.selected_channels.update(self.get_selected_channels())
+        print(f"Selected channels updated: {sorted(self.selected_channels)}")
+
+        self.build_graphs_for_selected_channels()
 
     
 # -------------- Main Application --------------
