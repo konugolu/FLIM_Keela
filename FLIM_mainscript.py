@@ -6,6 +6,7 @@ Created on Tue Mar 25 12:22:32 2025
 @author: keela
 """
 
+import queue
 import time
 import ctypes as ct
 import csv
@@ -19,6 +20,8 @@ from scipy.optimize import minimize
 from scipy.signal import convolve
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import os
+
+from TMF8828PiDataReader import DataReader
 
 
 # -------------- PicoHarp Measurement Class --------------
@@ -733,6 +736,34 @@ class TMF8828RaspberryPiGUI:
         # Placeholder for future implementation
         tk.Label(self.frame, text="TMF8828 Raspberry Pi Measurement will be implemented here.").pack(pady=20)
         tk.Button(self.frame, text="Back to Main", command=self.root.destroy).pack(pady=10)
+
+        self.data_queue = queue.Queue()
+        self.reader = DataReader(self.data_queue)
+        self.reader.start()
+
+        self.fig, self.ax = plt.subplots()
+        self.bars = self.ax.bar(np.arange(128), np.zeros(128))
+        self.ax.set_ylim(0, 100)
+
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+
+        self.update_plot()
+
+    def update_plot(self):
+        while not self.data_queue.empty():
+            line = self.data_queue.get()
+            parts = line.strip().split(";")
+            if len(parts) == 129 and parts[0].startswith("#HLONG"):
+                try:
+                    values = np.array(list(map(int, parts[1:])))
+                    for bar, val in zip(self.bars, values):
+                        bar.set_height(val)
+                    self.ax.set_ylim(0, values.max() * 1.1)
+                    self.canvas.draw()
+                except Exception as e:
+                    print(f"Error: {e}")
+        self.root.after(100, self.update_plot)
 
     
 # -------------- Main Application --------------
