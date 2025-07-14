@@ -738,8 +738,12 @@ class TMF8828RaspberryPiGUI:
         tk.Button(self.frame, text="Back to Main", command=self.root.destroy).pack(pady=10)
 
         self.data_queue = queue.Queue()
-        self.reader = DataReader(self.data_queue)
-        self.reader.start()
+        self.selected_channels = set() 
+        self.selected_channels.add(1)  # Default to channel 1
+        self.reader = DataReader(self.data_queue, self.selected_channels)
+        
+        self.start_reader_button = tk.Button(self.frame, text="Connect", command=self.start_reader)
+        self.start_reader_button.pack(pady=10)
 
         self.fig, self.ax = plt.subplots()
         self.bars = self.ax.bar(np.arange(128), np.zeros(128))
@@ -749,6 +753,10 @@ class TMF8828RaspberryPiGUI:
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
 
         self.update_plot()
+
+    def start_reader(self):
+        self.reader.start()
+        self.start_reader_button.config(state=tk.DISABLED)
 
     def update_plot(self):
         while not self.data_queue.empty():
