@@ -1,9 +1,9 @@
 import logging
 import numpy as np
 
-import total
-
 from enum import Enum
+
+from diffusion_equation import total
 Phantom = Enum('Phantom',[('SLAB','SLAB'),('SEMIINF','SEMIINF')])
 
 def Contini1997(rho,t,s,mua,musp,n1,n2,phantom,mua_independent,m):
