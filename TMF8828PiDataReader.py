@@ -3,10 +3,11 @@ import threading
 import time
 
 class DataReader(threading.Thread):
-    def __init__(self, data_queue, selected_channels):
+    def __init__(self, data_queue, selected_channels, status_queue=None):
         super().__init__(daemon=True)
         self.data_queue = data_queue
         self.selected_channels = selected_channels
+        self.status_queue = status_queue
 
         self.running = True
         self.measuring = True
@@ -42,8 +43,12 @@ class DataReader(threading.Thread):
             self.sock.sendall(b'(m0)')  # Trigger measurement
             
             response = read_all(self.sock)
+            print("Response received:", response)
             for line in response.splitlines():
-                for channel in self.selected_channels:
+                if line.startswith('#ITT'): # update the status queue with iteration info adn etc.
+                    if self.status_queue:
+                        self.status_queue.put(line)
+                for channel in self.selected_channels: # check if the channel is in the selected channels and update the data queue
                     target = f'#HLONG{channel:02d}'
                     if line.startswith(target):
                         self.data_queue.put(line)
@@ -60,6 +65,77 @@ class DataReader(threading.Thread):
         self.sock.close()
         print("DataReader stopped.")
 
+    def toggle_measurement(self):
+        if self.measuring:
+            self.measuring = False
+            print("Measurement stopped.")
+        else:
+            self.measuring = True
+            print("Measurement started.")
+
+    def send_command(self, command_char, command_value):
+        if self.sock:
+            try:
+                command = f'({command_char}{command_value})'.encode('utf-8')
+                self.sock.sendall(command)
+                response = read_all(self.sock)
+                if response:
+                    print(f"Command {command_char} with value {command_value} sent. Response: {response}")
+            except socket.error as e:
+                print(f"Socket error while sending command {command_char}: {e}")
+        else:
+            print("Socket not initialized. Cannot send command.")
+
+    def set_number_of_iterations(self, iterations):
+        if not (0 <= iterations <= 65535):
+            print("Iterations must be between 0 and 65535.")
+            return
+        self.send_command('I', iterations)
+        
+
+    def set_object_detection_threshold(self, threshold):
+        if not (0 <= threshold <= 255):
+            print("Threshold must be between 0 and 255.")
+            return
+        self.send_command('T', threshold)
+
+    def set_operation_mode(self, mode):
+        """
+        Toggle the number of pixel rows
+        0 - 3 x 3
+        1 - 4 x 4
+        2 - 3 x 6
+        3 - 8 x 8
+        """
+        if not (0 <= mode <= 3):
+            print("Please enter a valid mode\nAvailable modes: 0, 1, 2, 3")
+            return
+        self.send_command('P', mode)
+
+    def set_histogram_mode(self, mode):
+        """
+        Set histogram mode
+        0 - off
+        1 - reference histogram
+        2 - measurement histogram
+        3 - both
+        """
+        if not (0 <= mode <= 3):
+            print("Please enter a valid mode\nAvailable modes: 0, 1, 2, 3")
+            return
+        self.send_command('H', mode)
+
+    def set_short_range_mode(self, mode):
+        """
+        Set short range mode
+        0 - off
+        1 - on
+        """
+        if not (0 <= mode <= 1):
+            print("Please enter a valid mode\nAvailable modes: 0, 1")
+            return
+        self.send_command('R', mode)
+
 
 def read_all(sock, timeout=0.07):
     sock.settimeout(timeout)
@@ -74,10 +150,4 @@ def read_all(sock, timeout=0.07):
         pass
     return b''.join(chunks).decode('utf-8', errors='ignore')
 
-def start_measurement(self):
-    self.measuring = True
-    print( "Starting measurements ... ")
 
-def stop_measurement(self):
-    self.measuring = False
-    print( "Stopping measurements ... ")

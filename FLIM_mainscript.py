@@ -45,49 +45,49 @@ class PicoHarpGUI:
         bottom_frame.pack(fill="both", expand=True, pady=10)
 
         # Left: Input + Buttons
-        control_frame = ttk.Frame(top_frame)
-        control_frame.grid(row=0, column=0, sticky="nw", padx=10)
+        meas_settings_frame = ttk.Frame(top_frame)
+        meas_settings_frame.grid(row=0, column=0, sticky="nw", padx=10)
 
-        tk.Label(control_frame, text="Sync Offset:").grid(row=0, column=0, sticky="w")
-        self.sync_offset_entry = tk.Entry(control_frame, width=8)
+        tk.Label(meas_settings_frame, text="Sync Offset:").grid(row=0, column=0, sticky="w")
+        self.sync_offset_entry = tk.Entry(meas_settings_frame, width=8)
         self.sync_offset_entry.grid(row=0, column=1)
         self.sync_offset_entry.insert(0, "31000")
 
-        tk.Label(control_frame, text="Measurement Time (s):").grid(row=1, column=0, sticky="w")
-        self.meas_time_entry = tk.Entry(control_frame, width=8)
+        tk.Label(meas_settings_frame, text="Measurement Time (s):").grid(row=1, column=0, sticky="w")
+        self.meas_time_entry = tk.Entry(meas_settings_frame, width=8)
         self.meas_time_entry.grid(row=1, column=1)
         self.meas_time_entry.insert(0, "1")
 
-        tk.Button(control_frame, text="Start", command=self.start_measurement).grid(row=2, column=0, pady=2, sticky="ew")
-        tk.Button(control_frame, text="Stop", command=self.stop_measurement).grid(row=2, column=1, pady=2, sticky="ew")
+        tk.Button(meas_settings_frame, text="Start", command=self.start_measurement).grid(row=2, column=0, pady=2, sticky="ew")
+        tk.Button(meas_settings_frame, text="Stop", command=self.stop_measurement).grid(row=2, column=1, pady=2, sticky="ew")
         
         self.enable_fit = tk.BooleanVar()
-        tk.Checkbutton(control_frame, text="Enable Live Fitting", variable=self.enable_fit).grid(row=5, column=0, columnspan=2)
+        tk.Checkbutton(meas_settings_frame, text="Enable Live Fitting", variable=self.enable_fit).grid(row=5, column=0, columnspan=2)
         
         # ROI and Fit Range Inputs
-        tk.Label(control_frame, text="ROI Start (ns):").grid(row=6, column=0, sticky="w")
-        self.roi_start_entry = tk.Entry(control_frame, width=8)
+        tk.Label(meas_settings_frame, text="ROI Start (ns):").grid(row=6, column=0, sticky="w")
+        self.roi_start_entry = tk.Entry(meas_settings_frame, width=8)
         self.roi_start_entry.grid(row=6, column=1)
         self.roi_start_entry.insert(0, "0")
 
-        tk.Label(control_frame, text="ROI Stop (ns):").grid(row=7, column=0, sticky="w")
-        self.roi_stop_entry = tk.Entry(control_frame, width=8)
+        tk.Label(meas_settings_frame, text="ROI Stop (ns):").grid(row=7, column=0, sticky="w")
+        self.roi_stop_entry = tk.Entry(meas_settings_frame, width=8)
         self.roi_stop_entry.grid(row=7, column=1)
         self.roi_stop_entry.insert(0, "30")
 
-        tk.Label(control_frame, text="Fit Start (%):").grid(row=8, column=0, sticky="w")
-        self.fit_start_entry = tk.Entry(control_frame, width=8)
+        tk.Label(meas_settings_frame, text="Fit Start (%):").grid(row=8, column=0, sticky="w")
+        self.fit_start_entry = tk.Entry(meas_settings_frame, width=8)
         self.fit_start_entry.grid(row=8, column=1)
         self.fit_start_entry.insert(0, "80")
 
-        tk.Label(control_frame, text="Fit Stop (%):").grid(row=9, column=0, sticky="w")
-        self.fit_stop_entry = tk.Entry(control_frame, width=8)
+        tk.Label(meas_settings_frame, text="Fit Stop (%):").grid(row=9, column=0, sticky="w")
+        self.fit_stop_entry = tk.Entry(meas_settings_frame, width=8)
         self.fit_stop_entry.grid(row=9, column=1)
         self.fit_stop_entry.insert(0, "1")
 
 
         self.count_rate = tk.StringVar()
-        tk.Label(control_frame, textvariable=self.count_rate, fg="blue").grid(row=10, column=0, columnspan=2, pady=(10, 0))
+        tk.Label(meas_settings_frame, textvariable=self.count_rate, fg="blue").grid(row=10, column=0, columnspan=2, pady=(10, 0))
 
 
         # Right: IRF Plot
@@ -733,32 +733,46 @@ class TMF8828RaspberryPiGUI:
         self.frame = ttk.Frame(root)
         self.frame.pack(fill="both", expand=True)
 
-        # Placeholder for future implementation
-        tk.Label(self.frame, text="TMF8828 Raspberry Pi Measurement will be implemented here.").pack(pady=20)
-        tk.Button(self.frame, text="Back to Main", command=self.root.destroy).pack(pady=10)
-
         self.data_queue = queue.Queue()
         self.selected_channels = set() 
-        self.selected_channels.add(1)  # Default to channel 1
-        self.reader = DataReader(self.data_queue, self.selected_channels)
-        
-        self.start_reader_button = tk.Button(self.frame, text="Connect", command=self.start_reader)
-        self.start_reader_button.pack(pady=10)
+        # self.selected_channels.add(1)  # Default to channel 1
+        self.status_queue = queue.Queue()
+        self.reader = DataReader(self.data_queue, self.selected_channels, self.status_queue)
 
+        self.control_frame = tk.LabelFrame(self.frame, text="Control Panel", padx=5, pady=5, bg="white")
+        self.control_frame.grid(row=0, column=0, padx=5, pady=5)
+        
+        self.start_reader_button = tk.Button(self.control_frame, text="Connect", command=self.start_reader)
+        self.start_reader_button.grid(row=6, column=0, padx=5, pady=5)
+
+        self.toggle_measurement_button = tk.Button(self.control_frame, text="Toggle Measurement", command=self.reader.toggle_measurement, state=tk.DISABLED)
+        self.toggle_measurement_button.grid(row=6, column=1, padx=5, pady=5)
+
+        self.build_control_panel()
         self.build_channel_selector()
 
+        # self.fig, self.ax = plt.subplots()
+        # self.bars = self.ax.bar(np.arange(128), np.zeros(128))
+        # self.ax.set_ylim(0, 100)
         self.fig, self.ax = plt.subplots()
-        self.bars = self.ax.bar(np.arange(128), np.zeros(128))
+        self.x_data = np.arange(128)
+        self.y_data = np.zeros(128)
+        self.line, = self.ax.plot(self.x_data, self.y_data, color='blue')
         self.ax.set_ylim(0, 100)
+        self.ax.set_xlim(0, 127)
+        self.ax.set_xlabel("Time Bins")
+        self.ax.set_ylabel("Intensity")
+        self.ax.set_title("Time of Flight Graph")
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.frame)
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
+        self.canvas.get_tk_widget().grid(row=1, column=0, padx=5, pady=5)
 
         self.update_plot()
 
     def start_reader(self):
         self.reader.start()
         self.start_reader_button.config(state=tk.DISABLED)
+        self.toggle_measurement_button.config(state=tk.NORMAL)
 
     def update_plot(self):
         while not self.data_queue.empty():
@@ -767,17 +781,25 @@ class TMF8828RaspberryPiGUI:
             if len(parts) == 129 and parts[0].startswith("#HLONG"):
                 try:
                     values = np.array(list(map(int, parts[1:])))
-                    for bar, val in zip(self.bars, values):
-                        bar.set_height(val)
-                    self.ax.set_ylim(0, values.max() * 1.1)
+                    # for bar, val in zip(self.bars, values): #this one is for bar graph
+                    #     bar.set_height(val)
+                    # self.ax.set_ylim(0, values.max() * 1.1)
+                    self.y_data = values
+                    self.line.set_ydata(self.y_data)
+                    self.ax.set_ylim(0, max(100, values.max() * 1.1))  # Keep minimum Y max
                     self.canvas.draw()
                 except Exception as e:
                     print(f"Error: {e}")
         self.root.after(100, self.update_plot)
     
+
+    """
+    Channel Selector Methods
+    These methods handle the creation, destruction, and management of the channel selector frame.
+    """
     def build_channel_selector(self):
-        self.channel_frame = tk.LabelFrame(self.frame, text="TDC Channel", padx=5, pady=5, bg="white")
-        self.channel_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        self.channel_frame = tk.LabelFrame(self.control_frame, text="TDC Channel", padx=5, pady=5, bg="white")
+        self.channel_frame.grid(row=0, column=3, rowspan=6,columnspan=3, padx=5, pady=5)
 
         # Canvas and scrollbar setup
         canvas = tk.Canvas(self.channel_frame, height=120, bg="white")
@@ -817,12 +839,71 @@ class TMF8828RaspberryPiGUI:
         return [i for i, var in enumerate(self.channel_vars) if var.get()]
     
     def apply_selected_channels(self):
-        """Updates the selected channels"""
+        """Updates the selected channels in data reader with the current selection (channel_vars)"""
         self.selected_channels.clear()
         self.selected_channels.update(self.get_selected_channels())
         print(f"Selected channels updated: {sorted(self.selected_channels)}")
 
-        self.build_graphs_for_selected_channels()
+        # self.build_graphs_for_selected_channels()
+
+
+    """
+    Control Frame Methods
+    These methods handle the creation, destruction, and management of the control frame.
+    """
+    def build_control_panel(self):
+        meas_settings_frame = tk.LabelFrame(self.control_frame, text="Measuremnet Settings", padx=5, pady=5, bg="white")
+        meas_settings_frame.grid(row=0, column=0, rowspan=6,columnspan=3, padx=5, pady=5)
+
+        # Iterations
+        tk.Label(meas_settings_frame, text="Iterations (0-65535):", bg="white").grid(row=0, column=0, sticky="w")
+        self.iterations_var = tk.IntVar()
+        tk.Entry(meas_settings_frame, textvariable=self.iterations_var, width=10).grid(row=0, column=1)
+        tk.Button(meas_settings_frame, text="Set", command=self.set_iterations).grid(row=0, column=2)
+
+        # Threshold
+        tk.Label(meas_settings_frame, text="Threshold (0-255):", bg="white").grid(row=1, column=0, sticky="w")
+        self.threshold_var = tk.IntVar()
+        tk.Entry(meas_settings_frame, textvariable=self.threshold_var, width=10).grid(row=1, column=1)
+        tk.Button(meas_settings_frame, text="Set", command=self.set_threshold).grid(row=1, column=2)
+
+        # Short Range Mode
+        tk.Label(meas_settings_frame, text="Short Range Mode (0-Off, 1-On):", bg="white").grid(row=2, column=0, sticky="w")
+        self.short_range_var = tk.IntVar()
+        tk.Entry(meas_settings_frame, textvariable=self.short_range_var, width=10).grid(row=2, column=1)
+        tk.Button(meas_settings_frame, text="Set", command=self.set_short_range).grid(row=2, column=2)
+
+        # Operation Mode
+        tk.Label(meas_settings_frame, text="Operation Mode (0-3):", bg="white").grid(row=3, column=0, sticky="w")
+        self.operation_mode_var = tk.IntVar()
+        tk.Entry(meas_settings_frame, textvariable=self.operation_mode_var, width=10).grid(row=3, column=1)
+        tk.Button(meas_settings_frame, text="Set", command=self.set_operation_mode).grid(row=3, column=2)
+
+        # Histogram Mode
+        tk.Label(meas_settings_frame, text="Histogram Mode (0-3):", bg="white").grid(row=4, column=0, sticky="w")
+        self.histogram_mode_var = tk.IntVar()
+        tk.Entry(meas_settings_frame, textvariable=self.histogram_mode_var, width=10).grid(row=4, column=1)
+        tk.Button(meas_settings_frame, text="Set", command=self.set_histogram_mode).grid(row=4, column=2)
+
+    def set_iterations(self):
+        value = self.iterations_var.get()
+        self.reader.set_number_of_iterations(value)
+
+    def set_threshold(self):
+        value = self.threshold_var.get()
+        self.reader.set_object_detection_threshold(value)
+
+    def set_short_range(self):
+        value = self.short_range_var.get()
+        self.reader.set_short_range_mode(value)
+
+    def set_operation_mode(self):
+        value = self.operation_mode_var.get()
+        self.reader.set_operation_mode(value)
+
+    def set_histogram_mode(self):
+        value = self.histogram_mode_var.get()
+        self.reader.set_histogram_mode(value)
 
     
 # -------------- Main Application --------------
