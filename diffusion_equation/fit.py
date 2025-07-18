@@ -7,11 +7,13 @@ For code related to displaying fitted data, see `time_of_flight.gui.windows.plot
 """
 from pathlib import Path
 import matplotlib.pyplot as plt
+import scipy
 from scipy.optimize import least_squares
 import numpy as np
 # from .parsing import Data
 # from .diffusion_equation import Contini1997
 from diffusion_equation.diffusion_equation import Contini1997
+import time as t
 
 import logging
 from enum import IntEnum
@@ -28,7 +30,10 @@ def model(irf,rho,time,s,mua,musp,n1,n2,phantom,mua_independent,m, geometry=GEOM
     :param offset: Number of cells to offset the result by to most closely line it up with the measured data
     """
     theoretical = Contini1997(rho,time,s,mua,musp,n1,n2,phantom,mua_independent,m)
-    ret = np.pad(np.convolve(theoretical['total'][int(geometry)][0], irf), (offset,0))
+    start_time = t.time()
+    # ret = np.pad(np.convolve(theoretical['total'][int(geometry)][0], irf), (offset,0)) 
+    ret = np.pad(scipy.signal.fftconvolve(theoretical['total'][int(geometry)][0], irf), (offset,0))
+    print(f"convolution took {t.time() - start_time:.4f} seconds")
     return ret/max(ret)
 
 

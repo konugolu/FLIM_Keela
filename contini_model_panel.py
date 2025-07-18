@@ -72,9 +72,6 @@ class ContiniModelPanel:
             m = int(self.entries['m (num imaginary sources)'].get())
 
             result = Contini1997([rho], t, s, mua, musp, n1, n2, phantom, mua_independent, m)["total"]
-            # messagebox.showinfo("Result", f"Contini1997 Output:\n{result}")
-            print("Contini1997 Output:", result) 
-            print(len(result[0][0]))
             
             # plot both result[0][0] and result[1][0] as subplots in one figure
             import matplotlib.pyplot as plt
@@ -108,8 +105,6 @@ class ContiniModelPanel:
             m = int(self.entries['m (num imaginary sources)'].get())
 
             result = model(self.irf, [rho], t, s, mua, musp, n1, n2, phantom, mua_independent, m, GEOMETRY.REFLECTANCE, offset=0)
-            print("Convolution Result:", result)
-            print(len(result))
 
             #plot the convolved result
             import matplotlib.pyplot as plt
@@ -138,14 +133,14 @@ class ContiniModelPanel:
 
             # messagebox.showinfo("IRF Loaded", f"IRF loaded with {len(self.irf)} time bins.")
             print("IRF Loaded", f"IRF loaded with {len(self.irf)} time bins.")
-            import matplotlib.pyplot as plt
-            plt.figure(figsize=(8, 4))
-            plt.plot(self.irf)
-            plt.title("Loaded IRF")
-            plt.xlabel("Time Bin")
-            plt.ylabel("IRF Value")
-            plt.tight_layout()
-            plt.show()
+            # import matplotlib.pyplot as plt
+            # plt.figure(figsize=(8, 4))
+            # plt.plot(self.irf)
+            # plt.title("Loaded IRF")
+            # plt.xlabel("Time Bin")
+            # plt.ylabel("IRF Value")
+            # plt.tight_layout()
+            # plt.show()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load IRF: {e}")
 
