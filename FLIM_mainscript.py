@@ -22,6 +22,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import os
 
 from TMF8828PiDataReader import DataReader
+from contini_model_panel import ContiniModelPanel
+from fitting_worker import FittingWorker
 
 
 # -------------- PicoHarp Measurement Class --------------
@@ -733,15 +735,25 @@ class TMF8828RaspberryPiGUI:
         self.frame = ttk.Frame(root)
         self.frame.pack(fill="both", expand=True)
 
-        self.data_queue = queue.Queue()
+        self.plot_data_queue = queue.Queue()
         self.selected_channels = set() 
         # self.selected_channels.add(1)  # Default to channel 1
         self.status_queue = queue.Queue()
-        self.reader = DataReader(self.data_queue, self.selected_channels, self.status_queue)
+        self.fit_data_queue = queue.Queue()
+        self.reader = DataReader(self.plot_data_queue, self.fit_data_queue, self.selected_channels, self.status_queue)
 
-        self.control_frame = tk.LabelFrame(self.frame, text="Control Panel", padx=5, pady=5, bg="white")
-        self.control_frame.grid(row=0, column=0, padx=5, pady=5)
+        self.fitting_worker = None
         
+        self.control_frame = tk.LabelFrame(self.frame, text="Control Panel", padx=5, pady=5, bg="white")
+        self.control_frame.grid(row=1, column=0, padx=5, pady=5)
+
+        self.graph_frame = tk.LabelFrame(self.frame, text="Graph", padx=5, pady=5, bg="white")
+        self.graph_frame.grid(row=0, column=1, padx=5, pady=5)
+
+        self.model_frame = tk.LabelFrame(self.frame, text="Model", padx=5, pady=5, bg="white")
+        self.model_frame.grid(row=0, column=0, padx=5, pady=5)
+        
+
         self.start_reader_button = tk.Button(self.control_frame, text="Connect", command=self.start_reader)
         self.start_reader_button.grid(row=6, column=0, padx=5, pady=5)
 
@@ -750,6 +762,11 @@ class TMF8828RaspberryPiGUI:
 
         self.build_control_panel()
         self.build_channel_selector()
+        self.build_model_panel()
+
+        self.status_labels = {}
+        self.build_status_display()
+        self.update_status_display()
 
         # self.fig, self.ax = plt.subplots()
         # self.bars = self.ax.bar(np.arange(128), np.zeros(128))
@@ -764,7 +781,7 @@ class TMF8828RaspberryPiGUI:
         self.ax.set_ylabel("Intensity")
         self.ax.set_title("Time of Flight Graph")
 
-        self.canvas = FigureCanvasTkAgg(self.fig, master=self.frame)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.graph_frame)
         self.canvas.get_tk_widget().grid(row=1, column=0, padx=5, pady=5)
 
         self.update_plot()
@@ -774,9 +791,30 @@ class TMF8828RaspberryPiGUI:
         self.start_reader_button.config(state=tk.DISABLED)
         self.toggle_measurement_button.config(state=tk.NORMAL)
 
+    def start_fitting_worker(self):
+        if not self.contini_model_panel.get_irf():
+            messagebox.showerror("Error", "No IRF loaded. Please load an IRF before starting live fitting.")
+            return
+        # Starts the fitting worker if not already running.
+        if self.fitting_worker is None:
+            self.fitting_worker = FittingWorker(
+                data_queue=self.fit_data_queue,
+                get_settings_fn=self.contini_model_panel.get_settings,
+                irf=self.contini_model_panel.irf,  # Assuming loaded
+                result_callback=self.handle_fit_result,
+                interval=1.0  # every 1 second
+            )
+            self.fitting_worker.start()
+            print("Fitting worker started.")
+
+    #callback function for FittingWorker, if you want to do something with the fit result this function will be called whenever a fit result is available
+    def handle_fit_result(self, fit_result): 
+        # print("Live Fit Result:", fit_result) 
+        pass
+
     def update_plot(self):
-        while not self.data_queue.empty():
-            line = self.data_queue.get()
+        while not self.plot_data_queue.empty():
+            line = self.plot_data_queue.get()
             parts = line.strip().split(";")
             if len(parts) == 129 and parts[0].startswith("#HLONG"):
                 try:
@@ -792,6 +830,59 @@ class TMF8828RaspberryPiGUI:
                     print(f"Error: {e}")
         self.root.after(100, self.update_plot)
     
+    """
+    Statis Display Methods
+    """
+    def build_status_display(self):
+        status_frame = tk.LabelFrame(self.graph_frame, text="Sensor Status", padx=5, pady=5, bg="white")
+        status_frame.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+
+        status_fields = [
+            "Timestamp", "Iterations", "Threshold", "SPAD Map ID",
+            "Measurement Range", "Operation Mode", "De-scattering", "Short Range Mode"
+        ]
+
+        # Top row: first 5 fields
+        for idx, field in enumerate(status_fields[:5]):
+            label = tk.Label(status_frame, text=f"{field}: N/A", anchor="w", bg="white")
+            label.grid(row=0, column=idx, sticky="w", padx=5)
+            self.status_labels[field] = label
+
+        # Bottom row: remaining 4 fields
+        for idx, field in enumerate(status_fields[5:]):
+            label = tk.Label(status_frame, text=f"{field}: N/A", anchor="w", bg="white")
+            label.grid(row=1, column=idx, sticky="w", padx=5)
+            self.status_labels[field] = label
+
+    def update_status_display(self):
+        while not self.status_queue.empty():
+            line = self.status_queue.get()
+            if line.startswith("#ITT"):
+                self.parse_and_update_status(line)
+
+        # Schedule next check
+        self.root.after(1000, self.update_status_display)  # update every 1 second
+
+    def parse_and_update_status(self, line):
+        parts = line.strip().split(";")
+        if len(parts) != 9:
+            return  # Invalid format
+
+        status_values = {
+            "Timestamp": parts[1],
+            "Iterations": parts[2],
+            "Threshold": parts[3],
+            "SPAD Map ID": parts[4],
+            "Measurement Range": parts[5],
+            "Operation Mode": parts[6],
+            "De-scattering": "Enabled" if parts[7] == "1" else "Disabled",
+            "Short Range Mode": "Enabled" if parts[8] == "1" else "Disabled"
+        }
+
+        for key, value in status_values.items():
+            self.status_labels[key].config(text=f"{key}: {value}")
+
+
 
     """
     Channel Selector Methods
@@ -885,6 +976,8 @@ class TMF8828RaspberryPiGUI:
         tk.Entry(meas_settings_frame, textvariable=self.histogram_mode_var, width=10).grid(row=4, column=1)
         tk.Button(meas_settings_frame, text="Set", command=self.set_histogram_mode).grid(row=4, column=2)
 
+        tk.Button(self.control_frame, text="Start Live Fitting", command=self.start_fitting_worker).grid(row=7, column=0, padx=5, pady=5)
+
     def set_iterations(self):
         value = self.iterations_var.get()
         self.reader.set_number_of_iterations(value)
@@ -904,6 +997,15 @@ class TMF8828RaspberryPiGUI:
     def set_histogram_mode(self):
         value = self.histogram_mode_var.get()
         self.reader.set_histogram_mode(value)
+
+    """
+    Contini Model Panel Frame Methods
+    These methods handle the creation, destruction, and management of the model panel frame.
+    """
+    def build_model_panel(self):
+        self.contini_model_panel = ContiniModelPanel(self.model_frame)
+        panel_frame = self.contini_model_panel.get_frame()
+        panel_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
 
     
 # -------------- Main Application --------------

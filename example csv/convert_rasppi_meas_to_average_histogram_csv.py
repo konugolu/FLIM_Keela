@@ -1,6 +1,6 @@
 import numpy as np
 
-filename = 'example_128bin_irf.csv'  # replace with your actual file path
+filename = 'example_128bin_irf_10seq.csv'  # replace with your actual file path
 
 histograms = []
 
@@ -36,5 +36,5 @@ average_histogram = np.mean(histograms, axis=0)
 average_csv_string = ','.join(str(int(round(val))) for val in average_histogram)
 
 print("output: ", average_csv_string)
-with open('test_irf.csv', 'w') as out_file:
+with open('test_meas.csv', 'w') as out_file:
     out_file.write(average_csv_string + '\n')

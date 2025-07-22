@@ -10,45 +10,213 @@ class ContiniModelPanel:
     A class to represent the Contini model panel for diffusion equations.
     Provides a Tkinter GUI frame to input parameters and compute results.
     """
-
     def __init__(self, root):
         self.root = root
-        self.frame = ttk.Frame(root)
+        self.main_frame = ttk.Frame(root)
 
+        # Create left panel for inputs
+        self.input_frame = ttk.Frame(self.main_frame)
+        self.input_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
+        # Create right panel for plots
+        self.plot_frame = ttk.Frame(self.main_frame)
+        self.plot_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
         self.irf = None
+        self.contini = None
+        self.convolved = None
 
         self.params = {
             'rho': '0',
             'time_step (ns)': '0.19',
             'num_bins': '128',
-            's (slab thickness mm)': '18e3',
+            's': '18e3',
             'mua': '0.1e-4',
             'musp': '5e-4',
-            'n1 (external n)': '1',
-            'n2 (diffusing n)': '1.4',
+            'n1': '1',
+            'n2': '1.4',
             'phantom': 'slab',
-            'mua_independent (True/False)': 'True',
-            'm (num imaginary sources)': '400'
+            'mua_independent': 'True',
+            'm': '400',
+            'geometry': GEOMETRY.REFLECTANCE,  # Measurement geometry
+            't' : None, # this is calculated from time_step and num_bins
+            'fit_start': 'auto',  # Start bin for fitting
+            'fit_end': 'auto',   # End bin for fitting These should be dynamically calculated based on the length of the time array, 10-100 assumes 128 bins
         }
 
-        self.entries = {}
+        self.entries = {} # dictionary to hold entry widgets, to access their values just call self.entries['label'].get() e.g label 'rho' will be self.entries['rho'].get()
+        
+        self.create_widgets() # create the widgets in the user entry panel (label + entry)
 
-        for i, (label, default) in enumerate(self.params.items()):
-            ttk.Label(self.frame, text=label).grid(row=i, column=0, sticky='w', padx=5, pady=5)
-            entry = ttk.Entry(self.frame)
-            entry.insert(0, default)
-            entry.grid(row=i, column=1, padx=5, pady=5)
-            self.entries[label] = entry
+        self.apply_settings() # do it first time so it can calculate t, fit_start, and fit_end
 
-        self.contini_button = ttk.Button(self.frame, text="Contini", command=self.compute_contini)
+        self.contini_button = ttk.Button(self.input_frame, text="Contini", command=self.compute_contini)
         self.contini_button.grid(row=len(self.params), column=0, columnspan=1, pady=10)
 
-        self.compute_convolution_button = ttk.Button(self.frame, text="Contini & Convolve IRF", command=self.compute_convolution_with_irf)
+        self.compute_convolution_button = ttk.Button(self.input_frame, text="Contini & Convolve IRF", command=self.compute_convolution_with_irf)
         self.compute_convolution_button.grid(row=len(self.params), column=1, columnspan=1, pady=10)
 
-        load_irf_button = ttk.Button(self.frame, text="Load IRF from CSV", command=self.load_irf)
+        load_irf_button = ttk.Button(self.input_frame, text="Load IRF from CSV", command=self.load_irf)
         load_irf_button.grid(row=len(self.params)+1, column=0, columnspan=2, pady=10)
 
+        self.apply_settings_button = ttk.Button(self.input_frame, text="Apply Settings", command=self.apply_settings)
+        self.apply_settings_button.grid(row=len(self.params)+2, column=0, columnspan=2, pady=10)
+
+    def create_widgets(self):
+        # rho
+        ttk.Label(self.input_frame, text="Source-Detector Separation (rho, mm)").grid(row=0, column=0, sticky='w', padx=5, pady=5)
+        entry_rho = ttk.Entry(self.input_frame)
+        entry_rho.insert(0, self.params['rho'])
+        entry_rho.grid(row=0, column=1, padx=5, pady=5)
+        self.entries['rho'] = entry_rho
+
+        # time_step (ns)
+        ttk.Label(self.input_frame, text="Time Step (ns)").grid(row=1, column=0, sticky='w', padx=5, pady=5)
+        entry_time_step = ttk.Entry(self.input_frame)
+        entry_time_step.insert(0, self.params['time_step (ns)'])
+        entry_time_step.grid(row=1, column=1, padx=5, pady=5)
+        self.entries['time_step (ns)'] = entry_time_step
+
+        # num_bins
+        ttk.Label(self.input_frame, text="Number of Time Bins").grid(row=2, column=0, sticky='w', padx=5, pady=5)
+        entry_num_bins = ttk.Entry(self.input_frame)
+        entry_num_bins.insert(0, self.params['num_bins'])
+        entry_num_bins.grid(row=2, column=1, padx=5, pady=5)
+        self.entries['num_bins'] = entry_num_bins
+
+        # s (slab thickness mm)
+        ttk.Label(self.input_frame, text="Slab Thickness (s, mm)").grid(row=3, column=0, sticky='w', padx=5, pady=5)
+        entry_s = ttk.Entry(self.input_frame)
+        entry_s.insert(0, self.params['s'])
+        entry_s.grid(row=3, column=1, padx=5, pady=5)
+        self.entries['s (slab thickness mm)'] = entry_s
+
+        # mua
+        ttk.Label(self.input_frame, text="Absorption Coefficient (mua, mm⁻¹)").grid(row=4, column=0, sticky='w', padx=5, pady=5)
+        entry_mua = ttk.Entry(self.input_frame)
+        entry_mua.insert(0, self.params['mua'])
+        entry_mua.grid(row=4, column=1, padx=5, pady=5)
+        self.entries['mua'] = entry_mua
+
+        # musp
+        ttk.Label(self.input_frame, text="Reduced Scattering Coefficient (musp, mm⁻¹)").grid(row=5, column=0, sticky='w', padx=5, pady=5)
+        entry_musp = ttk.Entry(self.input_frame)
+        entry_musp.insert(0, self.params['musp'])
+        entry_musp.grid(row=5, column=1, padx=5, pady=5)
+        self.entries['musp'] = entry_musp
+
+        # n1 (external n)
+        ttk.Label(self.input_frame, text="External Refractive Index (n1)").grid(row=6, column=0, sticky='w', padx=5, pady=5)
+        entry_n1 = ttk.Entry(self.input_frame)
+        entry_n1.insert(0, self.params['n1'])
+        entry_n1.grid(row=6, column=1, padx=5, pady=5)
+        self.entries['n1 (external n)'] = entry_n1
+
+        # n2 (diffusing n)
+        ttk.Label(self.input_frame, text="Diffusing Refractive Index (n2)").grid(row=7, column=0, sticky='w', padx=5, pady=5)
+        entry_n2 = ttk.Entry(self.input_frame)
+        entry_n2.insert(0, self.params['n2'])
+        entry_n2.grid(row=7, column=1, padx=5, pady=5)
+        self.entries['n2 (diffusing n)'] = entry_n2
+
+        # phantom
+        ttk.Label(self.input_frame, text="Phantom Type (slab, semi-infinite, etc)").grid(row=8, column=0, sticky='w', padx=5, pady=5)
+        entry_phantom = ttk.Entry(self.input_frame)
+        entry_phantom.insert(0, self.params['phantom'])
+        entry_phantom.grid(row=8, column=1, padx=5, pady=5)
+        self.entries['phantom'] = entry_phantom
+
+        # mua_independent
+        ttk.Label(self.input_frame, text="Mua Independent? (True or False)").grid(row=9, column=0, sticky='w', padx=5, pady=5)
+        entry_mua_independent = ttk.Entry(self.input_frame)
+        entry_mua_independent.insert(0, self.params['mua_independent'])
+        entry_mua_independent.grid(row=9, column=1, padx=5, pady=5)
+        self.entries['mua_independent (True/False)'] = entry_mua_independent
+
+        # m (num imaginary sources)
+        ttk.Label(self.input_frame, text="Number of Imaginary Sources (m)").grid(row=10, column=0, sticky='w', padx=5, pady=5)
+        entry_m = ttk.Entry(self.input_frame)
+        entry_m.insert(0, self.params['m'])
+        entry_m.grid(row=10, column=1, padx=5, pady=5)
+        self.entries['m (num imaginary sources)'] = entry_m
+
+        # geometry
+        ttk.Label(self.input_frame, text="Measurement Geometry (see GEOMETRY)").grid(row=11, column=0, sticky='w', padx=5, pady=5)
+        entry_geometry = ttk.Entry(self.input_frame)
+        entry_geometry.insert(0, self.params['geometry'])
+        entry_geometry.grid(row=11, column=1, padx=5, pady=5)
+        self.entries['geometry'] = entry_geometry
+
+        # fit_start
+        ttk.Label(self.input_frame, text="Fit Start Bin (auto, or insert number)").grid(row=12, column=0, sticky='w', padx=5, pady=5)
+        entry_fit_start = ttk.Entry(self.input_frame)
+        entry_fit_start.insert(0, self.params['fit_start'])
+        entry_fit_start.grid(row=12, column=1, padx=5, pady=5)
+        self.entries['fit_start'] = entry_fit_start
+
+        # fit_end
+        ttk.Label(self.input_frame, text="Fit End Bin (auto, or insert number)").grid(row=13, column=0, sticky='w', padx=5, pady=5)
+        entry_fit_end = ttk.Entry(self.input_frame)
+        entry_fit_end.insert(0, self.params['fit_end'])
+        entry_fit_end.grid(row=13, column=1, padx=5, pady=5)
+        self.entries['fit_end'] = entry_fit_end
+
+    #getters for settings and the computed results as well as irf
+    def get_settings(self):
+        return self.params
+    def get_irf(self):
+        return self.irf
+    def get_contini(self):
+        return self.contini
+    def get_convolved(self):
+        return self.convolved
+
+    def apply_settings(self):
+        """
+        Applies the settings from the entries to the params dictionary.
+        This is useful if you want to change the default values of the parameters.
+        """
+        for key in self.params.keys():
+            if key in self.entries:
+                self.params[key] = self.entries[key].get()
+
+        # Dynamically calculate 't', 'fit_start', and 'fit_end'
+        try:
+            time_step = float(self.params['time_step (ns)'])
+            num_bins = int(self.params['num_bins'])
+            t = [1e-9 if i == 0 else time_step * i for i in range(num_bins)] # don't use 0 for time bin 0 otherwise it would cause error
+            self.params['t'] = t
+
+            # Handle fit_start
+            fit_start_entry = self.entries['fit_start'].get().strip().lower()
+            # If "auto" is not in the entry, we try to parse it as an integer, limit it to (0, num_bins)
+            if "auto" not in fit_start_entry:
+                try:
+                    fit_start_val = int(fit_start_entry)
+                    self.params['fit_start'] = str(max(0, min(fit_start_val, num_bins))) 
+                except Exception:
+                    self.params['fit_start'] = str(max(0, int(0.08 * num_bins)))
+            else:
+                self.params['fit_start'] = str(max(0, int(0.08 * num_bins)))
+
+            # Handle fit_end
+            fit_end_entry = self.entries['fit_end'].get().strip().lower()
+            if "auto" not in fit_end_entry:
+                try:
+                    fit_end_val = int(fit_end_entry)
+                    self.params['fit_end'] = str(max(0, min(fit_end_val, num_bins)))
+                except Exception:
+                    self.params['fit_end'] = str(min(num_bins - 1, int(0.78 * num_bins)))
+            else:
+                self.params['fit_end'] = str(min(num_bins - 1, int(0.78 * num_bins)))
+
+            #DEBUG: print the parameters to check
+            for k, v in self.params.items():
+                print(f"{k}: {v}")
+
+        except Exception:
+            self.params['t'] = None
+            self.params['fit_start'] = '10'
+            self.params['fit_end'] = '100'
 
     def compute_contini(self):
         """
@@ -57,22 +225,21 @@ class ContiniModelPanel:
         and the first array is the reflectance and the second array is the transmittance.
         """
         try:
-            rho = float(self.entries['rho'].get())
-            time_step = float(self.entries['time_step (ns)'].get())
-            num_bins = int(self.entries['num_bins'].get())
-            t = [time_step * i for i in range(num_bins)]
-
-            s = float(self.entries['s (slab thickness mm)'].get())
-            mua = float(self.entries['mua'].get())
-            musp = float(self.entries['musp'].get())
-            n1 = float(self.entries['n1 (external n)'].get())
-            n2 = float(self.entries['n2 (diffusing n)'].get())
-            phantom = self.entries['phantom'].get()
-            mua_independent = self.entries['mua_independent (True/False)'].get().lower() == 'true'
-            m = int(self.entries['m (num imaginary sources)'].get())
+            # Get parameters from self.params
+            rho = float(self.params['rho'])
+            t = self.params['t']
+            s = float(self.params['s'])
+            mua = float(self.params['mua'])
+            musp = float(self.params['musp'])
+            n1 = float(self.params['n1'])
+            n2 = float(self.params['n2'])
+            phantom = self.params['phantom']
+            mua_independent = self.params['mua_independent'].lower() == 'true'
+            m = int(self.params['m'])
 
             result = Contini1997([rho], t, s, mua, musp, n1, n2, phantom, mua_independent, m)["total"]
-            
+            self.contini = result  # Store the result for later use
+
             # plot both result[0][0] and result[1][0] as subplots in one figure
             import matplotlib.pyplot as plt
             fig, axs = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
@@ -90,26 +257,26 @@ class ContiniModelPanel:
 
     def compute_convolution_with_irf(self):
         try:
-            rho = float(self.entries['rho'].get())
-            time_step = float(self.entries['time_step (ns)'].get())
-            num_bins = int(self.entries['num_bins'].get())
-            t = [time_step * i for i in range(num_bins)]
+            # Get parameters from self.params
+            rho = float(self.params['rho'])
+            t = self.params['t']
+            s = float(self.params['s'])
+            mua = float(self.params['mua'])
+            musp = float(self.params['musp'])
+            n1 = float(self.params['n1'])
+            n2 = float(self.params['n2'])
+            phantom = self.params['phantom']
+            mua_independent = self.params['mua_independent'].lower() == 'true'
+            m = int(self.params['m'])
 
-            s = float(self.entries['s (slab thickness mm)'].get())
-            mua = float(self.entries['mua'].get())
-            musp = float(self.entries['musp'].get())
-            n1 = float(self.entries['n1 (external n)'].get())
-            n2 = float(self.entries['n2 (diffusing n)'].get())
-            phantom = self.entries['phantom'].get()
-            mua_independent = self.entries['mua_independent (True/False)'].get().lower() == 'true'
-            m = int(self.entries['m (num imaginary sources)'].get())
-
-            result = model(self.irf, [rho], t, s, mua, musp, n1, n2, phantom, mua_independent, m, GEOMETRY.REFLECTANCE, offset=0)
+            convolved = model(self.irf, [rho], t, s, mua, musp, n1, n2, phantom, mua_independent, m, GEOMETRY.REFLECTANCE, offset=0)
+            convolved = convolved[:int(self.params["num_bins"])]  # Truncate to match measurement bins (e.g. output is 255, and input is 128, so we truncate to 128)
+            self.convolved = convolved  # Store the convolved result for later use
 
             #plot the convolved result
             import matplotlib.pyplot as plt
             plt.figure(figsize=(8, 4))
-            plt.plot(result)
+            plt.plot(convolved)
             plt.title("Convolved Result (Reflectance)")
             plt.xlabel("Time Bin")
             plt.ylabel("Value")
@@ -145,7 +312,7 @@ class ContiniModelPanel:
             messagebox.showerror("Error", f"Failed to load IRF: {e}")
 
     def get_frame(self):
-        return self.frame
+        return self.main_frame
     
 
 

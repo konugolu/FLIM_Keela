@@ -30,11 +30,15 @@ def model(irf,rho,time,s,mua,musp,n1,n2,phantom,mua_independent,m, geometry=GEOM
     :param offset: Number of cells to offset the result by to most closely line it up with the measured data
     """
     theoretical = Contini1997(rho,time,s,mua,musp,n1,n2,phantom,mua_independent,m)
-    start_time = t.time()
+    # start_time = t.time()
     # ret = np.pad(np.convolve(theoretical['total'][int(geometry)][0], irf), (offset,0)) 
     ret = np.pad(scipy.signal.fftconvolve(theoretical['total'][int(geometry)][0], irf), (offset,0))
-    print(f"convolution took {t.time() - start_time:.4f} seconds")
-    return ret/max(ret)
+    # print(f"convolution took {t.time() - start_time:.4f} seconds")
+    max_val = np.max(ret)
+    if max_val > 0:
+        return ret / max_val
+    else:
+        return np.zeros_like(ret)  # Avoid division by zero
 
 
 def fun_residual(x, time, irf, measured, rho=0, n1=1,n2=1.4, fit_start=0, fit_end=-1, mua_independent=True, phantom='semiinf',s=0, m=0, offset=0, geometry=GEOMETRY.TRANSMITTANCE):

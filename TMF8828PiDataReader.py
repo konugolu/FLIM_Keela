@@ -3,9 +3,10 @@ import threading
 import time
 
 class DataReader(threading.Thread):
-    def __init__(self, data_queue, selected_channels, status_queue=None):
+    def __init__(self, plot_data_queue, fitting_data_queue, selected_channels, status_queue=None):
         super().__init__(daemon=True)
-        self.data_queue = data_queue
+        self.plot_data_queue = plot_data_queue
+        self.fitting_data_queue = fitting_data_queue
         self.selected_channels = selected_channels
         self.status_queue = status_queue
 
@@ -43,7 +44,6 @@ class DataReader(threading.Thread):
             self.sock.sendall(b'(m0)')  # Trigger measurement
             
             response = read_all(self.sock)
-            print("Response received:", response)
             for line in response.splitlines():
                 if line.startswith('#ITT'): # update the status queue with iteration info adn etc.
                     if self.status_queue:
@@ -51,7 +51,8 @@ class DataReader(threading.Thread):
                 for channel in self.selected_channels: # check if the channel is in the selected channels and update the data queue
                     target = f'#HLONG{channel:02d}'
                     if line.startswith(target):
-                        self.data_queue.put(line)
+                        self.plot_data_queue.put(line)
+                        self.fitting_data_queue.put(line)  #send the same data to 2 queuees because i dont want it to steal each other's data by sharing the same queue
                         break  # stop checking other channels once matched
             # # Parse the HLONG01 line
             # target = f'#HLONG{self.channel_number:02d}'

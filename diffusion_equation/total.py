@@ -1,6 +1,6 @@
 import numpy as np
 
-from .coefficients import D, z
+from diffusion_equation.coefficients import D, z
 
 def RT(rho,t,s,m,mua,musp,n1,n2,mua_independent):
     """
