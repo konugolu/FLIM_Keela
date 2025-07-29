@@ -27,6 +27,7 @@ class FittingWorker(threading.Thread):
                     latest_data = self.data_queue.get()
 
                 if latest_data is not None:
+                    # place holder code for fitting logic
                     settings = self.get_settings_fn()
                     print("[FittingWorker] Performing fitting with settings:", settings)
 

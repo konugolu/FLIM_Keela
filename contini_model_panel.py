@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter import filedialog
 from diffusion_equation.diffusion_equation import Contini1997
-from diffusion_equation.fit import model, GEOMETRY
+from diffusion_equation.fit import convolve_irf_with_model, model, GEOMETRY
 
 class ContiniModelPanel:
     """
@@ -25,18 +25,35 @@ class ContiniModelPanel:
         self.contini = None
         self.convolved = None
 
+        # self.params = {
+        #     'rho': '15',
+        #     'time_step (ns)': '0.004', #4e-12
+        #     'num_bins': '4096',
+        #     's': '1',
+        #     'mua': '0.01', # mm^{-1}
+        #     'musp': '1', # mm^{-1}
+        #     'n1': '1',
+        #     'n2': '1.41',
+        #     'phantom': 'slab',
+        #     'mua_independent': 'True',
+        #     'm': '200',
+        #     'geometry': GEOMETRY.REFLECTANCE,  # Measurement geometry
+        #     't' : None, # this is calculated from time_step and num_bins
+        #     'fit_start': 'auto',  # Start bin for fitting
+        #     'fit_end': 'auto',   # End bin for fitting These should be dynamically calculated based on the length of the time array, 10-100 assumes 128 bins
+        # }
         self.params = {
-            'rho': '0',
+            'rho': '15',
             'time_step (ns)': '0.19',
             'num_bins': '128',
-            's': '18e3',
-            'mua': '0.1e-4',
-            'musp': '5e-4',
+            's': '1',
+            'mua': '0.01', # mm^{-1}
+            'musp': '1', # mm^{-1}
             'n1': '1',
-            'n2': '1.4',
+            'n2': '1.41',
             'phantom': 'slab',
             'mua_independent': 'True',
-            'm': '400',
+            'm': '200',
             'geometry': GEOMETRY.REFLECTANCE,  # Measurement geometry
             't' : None, # this is calculated from time_step and num_bins
             'fit_start': 'auto',  # Start bin for fitting
@@ -119,7 +136,7 @@ class ContiniModelPanel:
         self.entries['n2 (diffusing n)'] = entry_n2
 
         # phantom
-        ttk.Label(self.input_frame, text="Phantom Type (slab, semi-infinite, etc)").grid(row=8, column=0, sticky='w', padx=5, pady=5)
+        ttk.Label(self.input_frame, text="Phantom Type (slab or semiinf)").grid(row=8, column=0, sticky='w', padx=5, pady=5)
         entry_phantom = ttk.Entry(self.input_frame)
         entry_phantom.insert(0, self.params['phantom'])
         entry_phantom.grid(row=8, column=1, padx=5, pady=5)
@@ -159,6 +176,15 @@ class ContiniModelPanel:
         entry_fit_end.insert(0, self.params['fit_end'])
         entry_fit_end.grid(row=13, column=1, padx=5, pady=5)
         self.entries['fit_end'] = entry_fit_end
+
+        # Add a checkbox for "Save to CSV"
+        self.save_to_csv = tk.BooleanVar(value=False)
+        save_csv_checkbox = ttk.Checkbutton(
+            self.input_frame,
+            text="Save to CSV",
+            variable=self.save_to_csv
+        )
+        save_csv_checkbox.grid(row=14, column=0, columnspan=2, sticky='w', padx=5, pady=5)
 
     #getters for settings and the computed results as well as irf
     def get_settings(self):
@@ -237,51 +263,80 @@ class ContiniModelPanel:
             mua_independent = self.params['mua_independent'].lower() == 'true'
             m = int(self.params['m'])
 
-            result = Contini1997([rho], t, s, mua, musp, n1, n2, phantom, mua_independent, m)["total"]
-            self.contini = result  # Store the result for later use
-
-            # plot both result[0][0] and result[1][0] as subplots in one figure
-            import matplotlib.pyplot as plt
-            fig, axs = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
-            axs[0].plot(result[0][0])
-            axs[0].set_title("Reflectance AKA result[0][0]")
-            axs[0].set_ylabel("Value")
-            axs[1].plot(result[1][0])
-            axs[1].set_title("Transmittance AKA result[1][0]")
-            axs[1].set_xlabel("Time Bin")
-            axs[1].set_ylabel("Value")
-            plt.tight_layout()
-            plt.show()
+            theoretical_model = Contini1997([rho], t, s, mua, musp, n1, n2, phantom, mua_independent, m)
+            self.contini = theoretical_model  # Store the result for later use
+            
+            result = theoretical_model["total"]
+            if not self.save_to_csv.get():
+                # plot both result[0][0] and result[1][0] as subplots in one figure
+                import matplotlib.pyplot as plt
+                fig, axs = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+                axs[0].plot(result[0][0])
+                axs[0].set_title("Reflectance AKA result[0][0]")
+                axs[0].set_ylabel("Value")
+                if phantom == "slab":
+                    axs[1].plot(result[1][0])
+                    axs[1].set_title("Transmittance AKA result[1][0]")
+                    axs[1].set_xlabel("Time Bin")
+                    axs[1].set_ylabel("Value")
+                plt.tight_layout()
+                plt.show()
+            else:
+                # Save the result to a CSV file
+                file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+                if file_path:
+                    with open(file_path, 'w', newline='') as csvfile:
+                        writer = csv.writer(csvfile)
+                        writer.writerow(['Reflectance', 'Transmittance'])
+                        for r, t in zip(result[0][0], result[1][0]):
+                            writer.writerow([r, t])
+                    messagebox.showinfo("Success", f"Results saved to {file_path}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to compute: {e}")
 
     def compute_convolution_with_irf(self):
         try:
-            # Get parameters from self.params
-            rho = float(self.params['rho'])
-            t = self.params['t']
-            s = float(self.params['s'])
-            mua = float(self.params['mua'])
-            musp = float(self.params['musp'])
-            n1 = float(self.params['n1'])
-            n2 = float(self.params['n2'])
-            phantom = self.params['phantom']
-            mua_independent = self.params['mua_independent'].lower() == 'true'
-            m = int(self.params['m'])
+            if self.irf is None:
+                messagebox.showerror("Error", "Please load an IRF first.")
+                return
+            convolved = None
+            if self.contini is None:
+                # Get parameters from self.params
+                rho = float(self.params['rho'])
+                t = self.params['t']
+                s = float(self.params['s'])
+                mua = float(self.params['mua'])
+                musp = float(self.params['musp'])
+                n1 = float(self.params['n1'])
+                n2 = float(self.params['n2'])
+                phantom = self.params['phantom']
+                mua_independent = self.params['mua_independent'].lower() == 'true'
+                m = int(self.params['m'])
 
-            convolved = model(self.irf, [rho], t, s, mua, musp, n1, n2, phantom, mua_independent, m, GEOMETRY.REFLECTANCE, offset=0)
-            convolved = convolved[:int(self.params["num_bins"])]  # Truncate to match measurement bins (e.g. output is 255, and input is 128, so we truncate to 128)
+                convolved = model(self.irf, [rho], t, s, mua, musp, n1, n2, phantom, mua_independent, m, GEOMETRY.REFLECTANCE, offset=0)
+                convolved = convolved[:int(self.params["num_bins"])]  # Truncate to match measurement bins (e.g. output is 255, and input is 128, so we truncate to 128)
+            else: # contini is already computed
+                convolved = convolve_irf_with_model(self.irf, self.contini, geometry=GEOMETRY.REFLECTANCE, offset=0, normalize_irf=True, normalize_model=True, denest_contini_output=True)
+            
             self.convolved = convolved  # Store the convolved result for later use
-
-            #plot the convolved result
-            import matplotlib.pyplot as plt
-            plt.figure(figsize=(8, 4))
-            plt.plot(convolved)
-            plt.title("Convolved Result (Reflectance)")
-            plt.xlabel("Time Bin")
-            plt.ylabel("Value")
-            plt.tight_layout()
-            plt.show()
+            if not self.save_to_csv.get():
+                #plot the convolved result
+                import matplotlib.pyplot as plt
+                plt.figure(figsize=(8, 4))
+                plt.plot(convolved)
+                plt.title("Convolved Result (Reflectance)")
+                plt.xlabel("Time Bin")
+                plt.ylabel("Value")
+                plt.tight_layout()
+                plt.show()
+            else:
+                file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+                if file_path:
+                    with open(file_path, 'w', newline='') as csvfile:
+                        writer = csv.writer(csvfile)
+                        for val in convolved:
+                            writer.writerow([val])
+                    messagebox.showinfo("Success", f"Convolved result saved to {file_path}")
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to compute: {e}")

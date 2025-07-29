@@ -65,7 +65,7 @@ def Contini1997(rho,t,s,mua,musp,n1,n2,phantom,mua_independent,m):
         if m != 0:
             logging.warning(f'Non-infinite number of positive or negative sources ({m}) specified for semi-infinite model')
         m=0
-
+    print("m: ", m)
     # Max acceptable error on computed data
     error=1e-6
 

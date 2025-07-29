@@ -30,15 +30,39 @@ def model(irf,rho,time,s,mua,musp,n1,n2,phantom,mua_independent,m, geometry=GEOM
     :param offset: Number of cells to offset the result by to most closely line it up with the measured data
     """
     theoretical = Contini1997(rho,time,s,mua,musp,n1,n2,phantom,mua_independent,m)
-    # start_time = t.time()
+
     # ret = np.pad(np.convolve(theoretical['total'][int(geometry)][0], irf), (offset,0)) 
     ret = np.pad(scipy.signal.fftconvolve(theoretical['total'][int(geometry)][0], irf), (offset,0))
-    # print(f"convolution took {t.time() - start_time:.4f} seconds")
+
     max_val = np.max(ret)
     if max_val > 0:
         return ret / max_val
     else:
         return np.zeros_like(ret)  # Avoid division by zero
+    
+def convolve_irf_with_model(irf, model, geometry=GEOMETRY.TRANSMITTANCE, offset=0, normalize_irf=True, normalize_model=True, denest_contini_output=False):
+    """
+    irf: 1D float array with n values where n = number of time bins
+    model: 1D float array with n values if denest_contini_output is False, otherwise a dict with the key 'total' which contains a 2D array with the first dimension being the geometry and the second dimension being the reflectance and transmittance values
+    geometry: The particular geometry in use, i.e. transmittance or reflectance. Values are enumerated in `GEOMETRY`, only useful if denest_contini_output is True
+    offset: Number of cells to offset the result by to most closely line it up with the measured data
+    normalize_irf: If True, normalize the irf to its maximum value before convolution
+    normalize_model: If True, normalize the model to its maximum value before convolution
+    denest_contini_output: If True, denest the output of Contini1997() which is a dict with the only key 'total', described in model param
+    """
+    if denest_contini_output:
+        model = model['total'][int(geometry)][0]
+    # check if irf and model have the same dimensions
+    if len(irf) != len(model):
+        raise ValueError(f"IRF and model must have the same length. IRF length: {len(irf)}, model length: {len(model)}")
+    if normalize_irf:
+        irf = irf / np.max(irf)
+    if normalize_model:
+        model = model / np.max(model)
+    res = np.pad(scipy.signal.fftconvolve(model, irf), (offset,0))
+    #truncate the result to the length of the model/irf
+    res = res[:len(irf)]
+    return res
 
 
 def fun_residual(x, time, irf, measured, rho=0, n1=1,n2=1.4, fit_start=0, fit_end=-1, mua_independent=True, phantom='semiinf',s=0, m=0, offset=0, geometry=GEOMETRY.TRANSMITTANCE):
@@ -107,14 +131,18 @@ def preprocess(measured, irf, meas_noise_win=(1,1), irf_noise_win=(1,1), meas_ro
             np.mean(measured[meas_noise_win[0]:meas_noise_win[1]])
         )
 
+    # Remove background from irf and measured data
     irf_bg = irf - bg[0]
-    irf_avg = slidingavg(irf_bg, irf_avg_w)
-    irf_bg_corrected = irf_bg/max(irf_avg)
-
     meas_bg = measured - bg[1]
-    meas_avg_bg = slidingavg(meas_bg, meas_avg_w)
-    meas_max = max(meas_avg_bg)
-    meas_bg_corrected = meas_bg/meas_max
+
+    # irf_avg = slidingavg(irf_bg, irf_avg_w)
+    # irf_bg_corrected = irf_avg/max(irf_avg)
+    # meas_avg_bg = slidingavg(meas_bg, meas_avg_w)
+    # meas_bg_corrected = meas_avg_bg/max(meas_avg_bg) Get rid of sliding average for now
+
+    #Normalize the background-corrected curves
+    irf_bg_corrected = irf_bg / np.max(irf_bg)  
+    meas_bg_corrected = meas_bg / np.max(meas_bg)  
 
     irf_bg_corrected[:irf_roi[0]] = 0
     irf_bg_corrected[irf_roi[1]:] = 0
