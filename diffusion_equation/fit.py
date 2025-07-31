@@ -81,6 +81,8 @@ def fun_residual(x, time, irf, measured, rho=0, n1=1,n2=1.4, fit_start=0, fit_en
 
     return np.pad(model(irf,rho,time,s,x[0],x[1],n1,n2,phantom,mua_independent,m, offset=offset, geometry=geometry), (shift,0))[fit_start:fit_end] - np.pad(measured,(shift,0))[fit_start:fit_end]
 
+
+
 #def fit(x0, u, y, irf, fit_start=0, fit_end=-1):
 #    """
 #    Fit measurement values `y` and independent variable `u` to parameter vector `x`
@@ -150,6 +152,99 @@ def preprocess(measured, irf, meas_noise_win=(1,1), irf_noise_win=(1,1), meas_ro
     meas_bg_corrected[meas_roi[1]:] = 0
 
     return (meas_bg_corrected, irf_bg_corrected)
+
+def fit_least_squares(
+    x0,
+    meas,
+    irf,
+    time_arr,
+    rho=0,
+    s=1,
+    n1=1,
+    n2=1.41,
+    phantom='semiinf',
+    mua_independent=True,
+    m=200,
+    geometry=GEOMETRY.TRANSMITTANCE,
+    offset=20,
+    meas_noise_win=None,
+    irf_noise_win=None,
+    meas_roi=None,
+    irf_roi=None,
+    meas_avg_w=3,
+    irf_avg_w=3,
+    fit_start=None,
+    fit_end=None,
+    verbose=1
+):
+    """
+    Fit measurement values to a convolutional diffusion model using least squares.
+
+    :param x0: Initial guess for [mua, musp]
+    :param meas: Measured histogram (1D list or array)
+    :param irf: Instrument response function (1D list or array)
+    :param time_step_ns: Time step between histogram bins in nanoseconds
+    :param Other params: Passed to `fun_residual` and `model`
+    :return: Optimized [mua, musp] as `res.x`
+    """
+    # Step 1: Convert to NumPy arrays
+    meas = np.array(meas)
+    irf = np.array(irf)
+
+    if meas_noise_win is None or irf_noise_win is None:
+        noise_win_percent = 0.08  # Use first 8% of the curve for noise window
+        noise_win_len = int(len(meas) * noise_win_percent)
+
+    if meas_roi is None or irf_roi is None:
+        roi = (0, len(meas))
+        meas_roi = roi
+        irf_roi = roi
+
+    # Step 2: Preprocess measured and irf
+    y, irf = preprocess(
+        meas,
+        irf=irf,
+        meas_noise_win=(0, noise_win_len),
+        irf_noise_win=(0, noise_win_len),
+        meas_roi=meas_roi,
+        irf_roi=irf_roi,
+        meas_avg_w=meas_avg_w,
+        irf_avg_w=irf_avg_w
+    )
+
+    # Remove negative values by setting them to zero
+    y[y < 0] = 0
+    irf[irf < 0] = 0
+
+    # Step 3: Define time axis
+    u = time_arr
+
+    # Auto-detect fit range if not provided
+    if fit_start is None or fit_end is None:
+        fit_start = int(len(y) * 0.10)
+        fit_end = int(len(y) * 0.90)
+
+    # Step 4: Perform fitting using least squares
+    fit = least_squares(
+        lambda x, u, y: fun_residual(
+            x, u, irf, y,
+            rho=rho, n1=n1, n2=n2,
+            fit_start=fit_start,
+            fit_end=fit_end,
+            mua_independent=mua_independent,
+            phantom=phantom,
+            s=s, m=m,
+            geometry=geometry,
+            offset=offset
+        ),
+        x0,
+        method='lm',
+        args=(u, y),
+        verbose=verbose
+    )
+
+    print(f"Fit result: mua = {fit.x[0]:.5e}, musp = {fit.x[1]:.5e}")
+    return fit.x
 
 # #commenting this out as idk how Data works ngl
 # def fit_from_variables(vs):

@@ -22,7 +22,7 @@ default_non_changing_residual_params = {
     'fit_start': int(0.1 * 1280),  # First 10% of measured bins
     'fit_end': int(0.9 * 1280),    # Last 10% of measured bins
 
-    'phantom': 'slab',# Geometry type
+    'phantom': 'semiinf',# Geometry type
     'mua_independent': True,  # Diffusion coefficient flag
     'm': 400,         # Number of imaginary sources
     'geometry': GEOMETRY.REFLECTANCE,  # Measurement geometry
@@ -141,7 +141,7 @@ if __name__ == "__main__":
                 print(f"{file_name}: Error during fitting - {e}")
 
     # Save results to results.txt
-    with open('results.txt', 'w') as f_out:
+    with open('results_semiinf.txt', 'w') as f_out:
         f_out.write("File Name, mua, musp\n")
         for file_name, fit_result in results:
             mua, musp = fit_result
