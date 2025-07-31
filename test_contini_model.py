@@ -79,7 +79,7 @@ print("Measurement 2 shape:", meas2.shape)
 
 
 """ run the fitting algo, same set of mua and musp, all semiinf, different measurement data"""
-x0 = np.array([0.025, 1.3])
+x0 = np.array([0.025, 5])
 res1 = fit_least_squares(
     x0,
     meas1,
@@ -93,10 +93,10 @@ res1 = fit_least_squares(
     mua_independent=mua_independent,
     m=m,
     geometry=GEOMETRY.REFLECTANCE,
-    offset=20,
     fit_start=None,
     fit_end=None,
-    verbose=1
+    verbose=1,
+    smart_crop=True
 )
 
 res2 = fit_least_squares(
@@ -112,7 +112,6 @@ res2 = fit_least_squares(
     mua_independent=mua_independent,
     m=m,
     geometry=GEOMETRY.REFLECTANCE,
-    offset=20,
     fit_start=None,
     fit_end=None,
     verbose=1

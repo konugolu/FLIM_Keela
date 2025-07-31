@@ -64,8 +64,8 @@ def convolve_irf_with_model(irf, model, geometry=GEOMETRY.TRANSMITTANCE, offset=
     res = res[:len(irf)]
     return res
 
-
-def fun_residual(x, time, irf, measured, rho=0, n1=1,n2=1.4, fit_start=0, fit_end=-1, mua_independent=True, phantom='semiinf',s=0, m=0, offset=0, geometry=GEOMETRY.TRANSMITTANCE):
+#TODO: add an option to only take the main curve, meaning, assuming normalized, peak of the curve for model and measured data should be 1, to the left of peak, cut off when y = 0.8, to the right of the peak, cut off when y=0.01 before taking the residual 
+def fun_residual(x, time, irf, measured, rho=0, n1=1,n2=1.4, fit_start=0, fit_end=-1, mua_independent=True, phantom='semiinf',s=0, m=0, offset=0, geometry=GEOMETRY.TRANSMITTANCE, smart_crop=False):
     """
     :param x: [mua, musp] to be calculated
     :param irf: input response function
@@ -79,7 +79,37 @@ def fun_residual(x, time, irf, measured, rho=0, n1=1,n2=1.4, fit_start=0, fit_en
     # TODO:Find a way to do this more efficiently
     shift=50
 
-    return np.pad(model(irf,rho,time,s,x[0],x[1],n1,n2,phantom,mua_independent,m, offset=offset, geometry=geometry), (shift,0))[fit_start:fit_end] - np.pad(measured,(shift,0))[fit_start:fit_end]
+    model_vals = model(
+        irf, rho, time, s,
+        x[0], x[1], n1, n2,
+        phantom, mua_independent, m,
+        offset=offset, geometry=geometry
+    )
+
+    # Pad model and measured for alignment
+    padded_model = np.pad(model_vals, (shift, 0))
+    padded_measured = np.pad(measured, (shift, 0))
+
+    if smart_crop:
+        # Find peak index of measured
+        peak_idx = padded_measured.argmax()
+        peak_val = padded_measured[peak_idx]
+
+        # Find index to the left where value drops below 0.8
+        left_idx = peak_idx
+        while left_idx > 0 and padded_measured[left_idx] > 0.8 * peak_val:
+            left_idx -= 1
+
+        # Find index to the right where value drops below 0.01
+        right_idx = peak_idx
+        while right_idx < len(padded_measured) and padded_measured[right_idx] > 0.01 * peak_val:
+            right_idx += 1
+
+        fit_start = left_idx
+        fit_end = right_idx
+        print(left_idx, right_idx)
+
+    return padded_model[fit_start:fit_end] - padded_measured[fit_start:fit_end]
 
 
 
@@ -140,7 +170,7 @@ def preprocess(measured, irf, meas_noise_win=(1,1), irf_noise_win=(1,1), meas_ro
     # irf_avg = slidingavg(irf_bg, irf_avg_w)
     # irf_bg_corrected = irf_avg/max(irf_avg)
     # meas_avg_bg = slidingavg(meas_bg, meas_avg_w)
-    # meas_bg_corrected = meas_avg_bg/max(meas_avg_bg) Get rid of sliding average for now
+    # meas_bg_corrected = meas_avg_bg/max(meas_avg_bg) #Get rid of sliding average for now
 
     #Normalize the background-corrected curves
     irf_bg_corrected = irf_bg / np.max(irf_bg)  
@@ -166,7 +196,7 @@ def fit_least_squares(
     mua_independent=True,
     m=200,
     geometry=GEOMETRY.TRANSMITTANCE,
-    offset=20,
+    offset=0,
     meas_noise_win=None,
     irf_noise_win=None,
     meas_roi=None,
@@ -175,7 +205,8 @@ def fit_least_squares(
     irf_avg_w=3,
     fit_start=None,
     fit_end=None,
-    verbose=1
+    verbose=1,
+    smart_crop=False
 ):
     """
     Fit measurement values to a convolutional diffusion model using least squares.
@@ -235,7 +266,8 @@ def fit_least_squares(
             phantom=phantom,
             s=s, m=m,
             geometry=geometry,
-            offset=offset
+            offset=offset,
+            smart_crop=smart_crop
         ),
         x0,
         method='lm',
