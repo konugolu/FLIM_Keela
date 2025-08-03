@@ -23,7 +23,10 @@ import os
 
 from TMF8828PiDataReader import DataReader
 from contini_model_panel import ContiniModelPanel
+from diffusion_equation.diffusion_equation import Contini1997
+from diffusion_equation.fit import convolve_irf_with_model
 from fitting_worker import FittingWorker
+from test_contini_model import GEOMETRY
 
 
 # -------------- PicoHarp Measurement Class --------------
@@ -727,6 +730,11 @@ class LifetimeFittingGUI:
 
 
 # -------------- TMF8828 Raspberry Pi Class --------------
+#TODO: options to save the meas curve
+#TODO: options to save the fitted curve
+#TODO: option to take 1 measurement and save as irf
+#TODO: live mua musp, 
+#TODO: smart crop, 80% 1%
 class TMF8828RaspberryPiGUI:
     def __init__(self, root):
         self.root = root
@@ -743,15 +751,21 @@ class TMF8828RaspberryPiGUI:
         self.reader = DataReader(self.plot_data_queue, self.fit_data_queue, self.selected_channels, self.status_queue)
 
         self.fitting_worker = None
+        self.left_frame = ttk.Frame(self.frame)
+        self.left_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")    
+        self.right_frame = ttk.Frame(self.frame)
+        self.right_frame.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
+
+        # top left corner
+        self.model_frame = tk.LabelFrame(self.left_frame, text="Model", padx=5, pady=5, bg="white")
+        self.model_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        # bottom left corner
+        self.control_frame = tk.LabelFrame(self.left_frame, text="Control Panel", padx=5, pady=5, bg="white")
+        self.control_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        # top right corner
+        self.graph_frame = tk.LabelFrame(self.right_frame, text="Graph", padx=5, pady=5, bg="white")
+        self.graph_frame.pack(fill="both", expand=True, padx=5, pady=5)
         
-        self.control_frame = tk.LabelFrame(self.frame, text="Control Panel", padx=5, pady=5, bg="white")
-        self.control_frame.grid(row=1, column=0, padx=5, pady=5)
-
-        self.graph_frame = tk.LabelFrame(self.frame, text="Graph", padx=5, pady=5, bg="white")
-        self.graph_frame.grid(row=0, column=1, padx=5, pady=5)
-
-        self.model_frame = tk.LabelFrame(self.frame, text="Model", padx=5, pady=5, bg="white")
-        self.model_frame.grid(row=0, column=0, padx=5, pady=5)
         
 
         self.start_reader_button = tk.Button(self.control_frame, text="Connect", command=self.start_reader)
@@ -759,6 +773,7 @@ class TMF8828RaspberryPiGUI:
 
         self.toggle_measurement_button = tk.Button(self.control_frame, text="Toggle Measurement", command=self.reader.toggle_measurement, state=tk.DISABLED)
         self.toggle_measurement_button.grid(row=6, column=1, padx=5, pady=5)
+
 
         self.build_control_panel()
         self.build_channel_selector()
@@ -771,15 +786,24 @@ class TMF8828RaspberryPiGUI:
         # self.fig, self.ax = plt.subplots()
         # self.bars = self.ax.bar(np.arange(128), np.zeros(128))
         # self.ax.set_ylim(0, 100)
-        self.fig, self.ax = plt.subplots()
+
+        # self.fig, self.ax = plt.subplots()
+        self.fig, (self.ax, self.residual_ax) = plt.subplots(2, 1, figsize=(6, 6), sharex=True, height_ratios=[3, 1])
         self.x_data = np.arange(128)
         self.y_data = np.zeros(128)
-        self.line, = self.ax.plot(self.x_data, self.y_data, color='blue')
+        self.line, = self.ax.plot(self.x_data, self.y_data, color='blue', label='Measurement Curve')
+        self.model_line, = self.ax.plot(self.x_data, np.zeros_like(self.x_data), color='red', linestyle='--', label='Fitted Model')
+        self.ax.legend()
         self.ax.set_ylim(0, 100)
         self.ax.set_xlim(0, 127)
         self.ax.set_xlabel("Time Bins")
         self.ax.set_ylabel("Intensity")
         self.ax.set_title("Time of Flight Graph")
+        self.residual_line, = self.residual_ax.plot(self.x_data, np.zeros_like(self.x_data), color='green', label='Residual')
+        self.residual_ax.axhline(0, color='gray', linestyle='--')
+        self.residual_ax.set_ylabel("Residual")
+        self.residual_ax.set_xlabel("Time Bins")
+        self.residual_ax.legend()
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.graph_frame)
         self.canvas.get_tk_widget().grid(row=1, column=0, padx=5, pady=5)
@@ -802,15 +826,42 @@ class TMF8828RaspberryPiGUI:
                 get_settings_fn=self.contini_model_panel.get_settings,
                 irf=self.contini_model_panel.irf,  # Assuming loaded
                 result_callback=self.handle_fit_result,
-                interval=1.0  # every 1 second
+                interval=0.5  # every 1 second
             )
             self.fitting_worker.start()
             print("Fitting worker started.")
 
     #callback function for FittingWorker, if you want to do something with the fit result this function will be called whenever a fit result is available
     def handle_fit_result(self, fit_result): 
-        # print("Live Fit Result:", fit_result) 
-        pass
+
+        print("Live Fit Result:", fit_result) 
+        # update the fit result label
+        self.fit_result_var.set(f"μa: {fit_result['mua']:.4f}, μs': {fit_result['musp']:.4f}")
+
+        # create the fitting curve using the model
+        mua, musp = fit_result["mua"], fit_result["musp"]
+        settings = self.contini_model_panel.get_settings()
+        rho = float(settings['rho'])
+        t = settings['t']
+        s = float(settings['s'])
+        n1 = float(settings['n1'])
+        n2 = float(settings['n2'])
+        phantom = settings['phantom']
+        mua_independent = settings['mua_independent'].lower() == 'true'
+        m = int(settings['m'])
+        output = Contini1997([rho], t, s, mua, musp, n1, n2, phantom, mua_independent, m)["total"][0][0]
+        model_conv = convolve_irf_with_model(self.contini_model_panel.irf, output, geometry=GEOMETRY.REFLECTANCE, offset=0, normalize_irf=True, normalize_model=True, denest_contini_output=False)
+        
+        model_conv = model_conv/max(model_conv) #NORMALIZING
+        self.model_line.set_ydata(model_conv)
+
+        if len(model_conv) == len(self.y_data):
+            residual = self.y_data - model_conv
+            self.residual_line.set_ydata(residual)
+            self.residual_ax.set_ylim(residual.min() * 1.1, residual.max() * 1.1)
+
+        self.canvas.draw()
+        print("Model line updated with new fit result.")
 
     def update_plot(self):
         while not self.plot_data_queue.empty():
@@ -822,20 +873,29 @@ class TMF8828RaspberryPiGUI:
                     # for bar, val in zip(self.bars, values): #this one is for bar graph
                     #     bar.set_height(val)
                     # self.ax.set_ylim(0, values.max() * 1.1)
+                    values = values / max(values) #NORMALIZING
                     self.y_data = values
                     self.line.set_ydata(self.y_data)
-                    self.ax.set_ylim(0, max(100, values.max() * 1.1))  # Keep minimum Y max
+                    # self.ax.set_ylim(0, max(100, values.max() * 1.1))  # Keep minimum Y max
+                    self.ax.set_ylim(0, values.max() * 1.1)  # Keep minimum Y max
                     self.canvas.draw()
                 except Exception as e:
                     print(f"Error: {e}")
         self.root.after(100, self.update_plot)
     
     """
-    Statis Display Methods
+    Status Display Methods
     """
     def build_status_display(self):
         status_frame = tk.LabelFrame(self.graph_frame, text="Sensor Status", padx=5, pady=5, bg="white")
         status_frame.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+
+        # Create a StringVar to hold the dynamic text
+        self.fit_result_var = tk.StringVar()
+        self.fit_result_var.set("μa: ---, μs': ---")
+        # Label bound to the StringVar
+        fit_label = tk.Label(self.graph_frame, textvariable=self.fit_result_var, font=("Arial", 14))
+        fit_label.grid(row=3, column=0, padx=5, pady=5, sticky="w")
 
         status_fields = [
             "Timestamp", "Iterations", "Threshold", "SPAD Map ID",

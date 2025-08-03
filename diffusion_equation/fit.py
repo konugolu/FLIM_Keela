@@ -20,7 +20,7 @@ from enum import IntEnum
 
 GEOMETRY = IntEnum('GEOMETRY', {'REFLECTANCE':0, 'TRANSMITTANCE':1})
 
-def model(irf,rho,time,s,mua,musp,n1,n2,phantom,mua_independent,m, geometry=GEOMETRY.TRANSMITTANCE, offset=0):
+def model(irf,rho,time,s,mua,musp,n1,n2,phantom,mua_independent,m, geometry=GEOMETRY.REFLECTANCE, offset=0):
     """
     This function returns the convolution of the theoretical model given by `diffusion_equation.Contini1997` with the measured irf
 
@@ -40,7 +40,7 @@ def model(irf,rho,time,s,mua,musp,n1,n2,phantom,mua_independent,m, geometry=GEOM
     else:
         return np.zeros_like(ret)  # Avoid division by zero
     
-def convolve_irf_with_model(irf, model, geometry=GEOMETRY.TRANSMITTANCE, offset=0, normalize_irf=True, normalize_model=True, denest_contini_output=False):
+def convolve_irf_with_model(irf, model, geometry=GEOMETRY.REFLECTANCE, offset=0, normalize_irf=True, normalize_model=True, denest_contini_output=False):
     """
     irf: 1D float array with n values where n = number of time bins
     model: 1D float array with n values if denest_contini_output is False, otherwise a dict with the key 'total' which contains a 2D array with the first dimension being the geometry and the second dimension being the reflectance and transmittance values

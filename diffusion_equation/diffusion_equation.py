@@ -69,10 +69,14 @@ def Contini1997(rho,t,s,mua,musp,n1,n2,phantom,mua_independent,m):
     # Max acceptable error on computed data
     error=1e-6
 
+    # ADDED TO FIX SEMIINF PHANTOM BEHAVIOUR ISSUE
     if phantom == Phantom.SLAB:
         RT_total                       = total.RT                      (rho,t,s,m,mua,musp,n1,n2,mua_independent)
     if phantom == Phantom.SEMIINF:
         RT_total                       = total.RT                      (rho,t,s,m+1,mua,musp,n1,n2,mua_independent)
+    # ADDED TO FIX SEMIINF PHANTOM BEHAVIOUR ISSUE
+    #### BELOW IS THE ORIGINAL CODE FOR THE RETURN VALUE OF RT_TOTAL
+        
     #RT_cw_source                   = cw_source.RT                  (rho  ,s,m,mua,musp,n1,n2,mua_independent)
     #RT_infinite_beam               = infinite_beam.RT              (    t,s,m,mua,musp,n1,n2,mua_independent)
     #RT_infinite_beam_time_integral = infinite_beam_time_integral.RT(      s,m,mua,musp,n1,n2,mua_independent)

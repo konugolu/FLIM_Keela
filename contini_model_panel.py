@@ -41,6 +41,7 @@ class ContiniModelPanel:
         #     't' : None, # this is calculated from time_step and num_bins
         #     'fit_start': 'auto',  # Start bin for fitting
         #     'fit_end': 'auto',   # End bin for fitting These should be dynamically calculated based on the length of the time array, 10-100 assumes 128 bins
+        #     'smart_crop': 'True',  # Smart crop option 80% of y to the left of peak, 1% of y to the right of peak
         # }
         self.params = {
             'rho': '15',
@@ -51,13 +52,14 @@ class ContiniModelPanel:
             'musp': '1', # mm^{-1}
             'n1': '1',
             'n2': '1.41',
-            'phantom': 'slab',
+            'phantom': 'semiinf',
             'mua_independent': 'True',
             'm': '200',
             'geometry': GEOMETRY.REFLECTANCE,  # Measurement geometry
             't' : None, # this is calculated from time_step and num_bins
             'fit_start': 'auto',  # Start bin for fitting
             'fit_end': 'auto',   # End bin for fitting These should be dynamically calculated based on the length of the time array, 10-100 assumes 128 bins
+            'smart_crop': 'True',  # Smart crop option 80% of y to the left of peak, 1% of y to the right of peak
         }
 
         self.entries = {} # dictionary to hold entry widgets, to access their values just call self.entries['label'].get() e.g label 'rho' will be self.entries['rho'].get()
@@ -177,6 +179,13 @@ class ContiniModelPanel:
         entry_fit_end.grid(row=13, column=1, padx=5, pady=5)
         self.entries['fit_end'] = entry_fit_end
 
+        # smart crop
+        ttk.Label(self.input_frame, text="Smart Crop (True or False)").grid(row=14, column=0, sticky='w', padx=5, pady=5)
+        entry_smart_crop = ttk.Entry(self.input_frame)
+        entry_smart_crop.insert(0, self.params['smart_crop'])
+        entry_smart_crop.grid(row=14, column=1, padx=5, pady=5)
+        self.entries['smart_crop'] = entry_smart_crop
+
         # Add a checkbox for "Save to CSV"
         self.save_to_csv = tk.BooleanVar(value=False)
         save_csv_checkbox = ttk.Checkbutton(
@@ -184,7 +193,7 @@ class ContiniModelPanel:
             text="Save to CSV",
             variable=self.save_to_csv
         )
-        save_csv_checkbox.grid(row=14, column=0, columnspan=2, sticky='w', padx=5, pady=5)
+        save_csv_checkbox.grid(row=15, column=0, columnspan=2, sticky='w', padx=5, pady=5)
 
     #getters for settings and the computed results as well as irf
     def get_settings(self):
@@ -209,31 +218,37 @@ class ContiniModelPanel:
         try:
             time_step = float(self.params['time_step (ns)'])
             num_bins = int(self.params['num_bins'])
-            t = [1e-9 if i == 0 else time_step * i for i in range(num_bins)] # don't use 0 for time bin 0 otherwise it would cause error
+            # t = [1e-9 if i == 0 else time_step * i for i in range(num_bins)] # don't use 0 for time bin 0 otherwise it would cause error
+            t = [time_step * i for i in range(num_bins)] # don't use 0 for time bin 0 otherwise it would cause error
             self.params['t'] = t
 
-            # Handle fit_start
-            fit_start_entry = self.entries['fit_start'].get().strip().lower()
-            # If "auto" is not in the entry, we try to parse it as an integer, limit it to (0, num_bins)
-            if "auto" not in fit_start_entry:
-                try:
-                    fit_start_val = int(fit_start_entry)
-                    self.params['fit_start'] = str(max(0, min(fit_start_val, num_bins))) 
-                except Exception:
+            smart_crop_entry = self.entries['smart_crop'].get().strip().lower()
+            if smart_crop_entry == "true":
+                self.params['fit_start'] = '0'
+                self.params['fit_end'] = str(num_bins - 1)
+            else: 
+                # Handle fit_start
+                fit_start_entry = self.entries['fit_start'].get().strip().lower()
+                # If "auto" is not in the entry, we try to parse it as an integer, limit it to (0, num_bins)
+                if "auto" not in fit_start_entry:
+                    try:
+                        fit_start_val = int(fit_start_entry)
+                        self.params['fit_start'] = str(max(0, min(fit_start_val, num_bins))) 
+                    except Exception:
+                        self.params['fit_start'] = str(max(0, int(0.08 * num_bins)))
+                else:
                     self.params['fit_start'] = str(max(0, int(0.08 * num_bins)))
-            else:
-                self.params['fit_start'] = str(max(0, int(0.08 * num_bins)))
 
-            # Handle fit_end
-            fit_end_entry = self.entries['fit_end'].get().strip().lower()
-            if "auto" not in fit_end_entry:
-                try:
-                    fit_end_val = int(fit_end_entry)
-                    self.params['fit_end'] = str(max(0, min(fit_end_val, num_bins)))
-                except Exception:
+                # Handle fit_end
+                fit_end_entry = self.entries['fit_end'].get().strip().lower()
+                if "auto" not in fit_end_entry:
+                    try:
+                        fit_end_val = int(fit_end_entry)
+                        self.params['fit_end'] = str(max(0, min(fit_end_val, num_bins)))
+                    except Exception:
+                        self.params['fit_end'] = str(min(num_bins - 1, int(0.78 * num_bins)))
+                else:
                     self.params['fit_end'] = str(min(num_bins - 1, int(0.78 * num_bins)))
-            else:
-                self.params['fit_end'] = str(min(num_bins - 1, int(0.78 * num_bins)))
 
             #DEBUG: print the parameters to check
             for k, v in self.params.items():
