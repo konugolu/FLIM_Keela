@@ -12,10 +12,12 @@ class DataReader(threading.Thread):
 
         self.running = True
         self.measuring = True
+        self.file_path = None
+        self.saving_to_csv = False
         self.sock = None
 
     def setup(self):
-        self.sock = socket.create_connection(('127.0.0.1', 39998))
+        self.sock = socket.create_connection(('127.0.0.1', 39998)) #establish tcp connection
         try:
             # Read initial connection data
             init = read_all(self.sock, timeout=0.5)
@@ -23,7 +25,7 @@ class DataReader(threading.Thread):
             print(init)
 
             print("\nChanging iteration...")
-            self.sock.sendall(b'(i275)')  # Trigger measurement
+            self.sock.sendall(b'(i275)')  # Set iterations to 275
             time.sleep(0.1)        # Short wait before reading
             print("\nChanging Histogram Mode ")
             self.sock.sendall(b'(H3)')  # H0 to switch off, 1 for reference histogram, 2 for measuremnet histogram, 3 for both
@@ -51,6 +53,11 @@ class DataReader(threading.Thread):
                 for channel in self.selected_channels: # check if the channel is in the selected channels and update the data queue
                     target = f'#HLONG{channel:02d}'
                     if line.startswith(target):
+                        # if file_path is set and saving is enabled save the data to a csv file
+                        if self.file_path and self.saving_to_csv:
+                            with open(self.file_path, 'a') as f:
+                                f.write(line + '\n')
+
                         self.plot_data_queue.put(line)
                         self.fitting_data_queue.put(line)  #send the same data to 2 queuees because i dont want it to steal each other's data by sharing the same queue
                         break  # stop checking other channels once matched
@@ -73,6 +80,23 @@ class DataReader(threading.Thread):
         else:
             self.measuring = True
             print("Measurement started.")
+
+    def set_file_path(self, file_path):
+        """
+        Set the file path for saving data.
+        This is a placeholder function, as the actual saving logic is not implemented here.
+        """
+        self.file_path = file_path
+        print(f"File path set to: {file_path}")
+
+    def toggle_saving_to_csv(self):
+        """
+        Toggle saving data to CSV.
+        This is a placeholder function, as the actual saving logic is not implemented here.
+        """
+        self.saving_to_csv = not self.saving_to_csv
+        status = "enabled" if self.saving_to_csv else "disabled"
+        print(f"Saving to CSV is now {status}.")
 
     def send_command(self, command_char, command_value):
         if self.sock:

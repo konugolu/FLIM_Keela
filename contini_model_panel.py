@@ -2,6 +2,8 @@ import csv
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter import filedialog
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from diffusion_equation.diffusion_equation import Contini1997
 from diffusion_equation.fit import convolve_irf_with_model, model, GEOMETRY
 
@@ -24,27 +26,15 @@ class ContiniModelPanel:
         self.irf = None
         self.contini = None
         self.convolved = None
+        # Create 3 labeled plots
+        self.irf_ax, self.irf_canvas = self._create_plot_frame(self.plot_frame, "IRF")
+        self.contini_ax, self.contini_canvas = self._create_plot_frame(self.plot_frame, "Contini")
+        self.convolved_ax, self.convolved_canvas = self._create_plot_frame(self.plot_frame, "Convolved")
 
-        # self.params = {
-        #     'rho': '15',
-        #     'time_step (ns)': '0.004', #4e-12
-        #     'num_bins': '4096',
-        #     's': '1',
-        #     'mua': '0.01', # mm^{-1}
-        #     'musp': '1', # mm^{-1}
-        #     'n1': '1',
-        #     'n2': '1.41',
-        #     'phantom': 'slab',
-        #     'mua_independent': 'True',
-        #     'm': '200',
-        #     'geometry': GEOMETRY.REFLECTANCE,  # Measurement geometry
-        #     't' : None, # this is calculated from time_step and num_bins
-        #     'fit_start': 'auto',  # Start bin for fitting
-        #     'fit_end': 'auto',   # End bin for fitting These should be dynamically calculated based on the length of the time array, 10-100 assumes 128 bins
-        #     'smart_crop': 'True',  # Smart crop option 80% of y to the left of peak, 1% of y to the right of peak
-        # }
         self.params = {
             'rho': '15',
+            # 'time_step (ns)': '0.004', #4e-12
+            # 'num_bins': '4096',
             'time_step (ns)': '0.19',
             'num_bins': '128',
             's': '1',
@@ -179,7 +169,17 @@ class ContiniModelPanel:
         entry_fit_end.grid(row=13, column=1, padx=5, pady=5)
         self.entries['fit_end'] = entry_fit_end
 
-        # smart crop
+        # smart crop as a checkbox
+        # self.smart_crop_var = tk.BooleanVar(value=self.params['smart_crop'].lower() == "true")
+        # def on_smart_crop_toggle():
+        #     self.params['smart_crop'] = "True" if self.smart_crop_var.get() else "False"
+        # smart_crop_checkbox = ttk.Checkbutton(
+        #     self.input_frame,
+        #     text="Smart Crop",
+        #     variable=self.smart_crop_var,
+        #     command=on_smart_crop_toggle
+        # )
+        # smart_crop_checkbox.grid(row=14, column=0, columnspan=2, sticky='w', padx=5, pady=5)
         ttk.Label(self.input_frame, text="Smart Crop (True or False)").grid(row=14, column=0, sticky='w', padx=5, pady=5)
         entry_smart_crop = ttk.Entry(self.input_frame)
         entry_smart_crop.insert(0, self.params['smart_crop'])
@@ -193,7 +193,26 @@ class ContiniModelPanel:
             text="Save to CSV",
             variable=self.save_to_csv
         )
-        save_csv_checkbox.grid(row=15, column=0, columnspan=2, sticky='w', padx=5, pady=5)
+        save_csv_checkbox.grid(row=15, column=1, columnspan=2, sticky='w', padx=5, pady=5)
+
+    def _create_plot_frame(self, parent, title):
+        """Create a labeled frame with an embedded empty matplotlib plot."""
+        frame = ttk.LabelFrame(parent, text=title)
+        frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        fig = Figure(figsize=(3, 1.7), dpi=100)
+        ax = fig.add_subplot(111)
+        ax.set_xlabel("Time Bin")
+        ax.set_ylabel("Value")
+        ax.text(0.5, 0.5, 'No data yet', transform=ax.transAxes,
+                ha='center', va='center', fontsize=12, color='gray')
+
+        canvas = FigureCanvasTkAgg(fig, master=frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        return ax, canvas
+
 
     #getters for settings and the computed results as well as irf
     def get_settings(self):
@@ -249,15 +268,14 @@ class ContiniModelPanel:
                         self.params['fit_end'] = str(min(num_bins - 1, int(0.78 * num_bins)))
                 else:
                     self.params['fit_end'] = str(min(num_bins - 1, int(0.78 * num_bins)))
-
-            #DEBUG: print the parameters to check
-            for k, v in self.params.items():
-                print(f"{k}: {v}")
-
         except Exception:
             self.params['t'] = None
             self.params['fit_start'] = '10'
             self.params['fit_end'] = '100'
+        finally:
+            #DEBUG: print the parameters to check
+            for k, v in self.params.items():
+                print(f"{k}: {v}")
 
     def compute_contini(self):
         """
@@ -282,6 +300,15 @@ class ContiniModelPanel:
             self.contini = theoretical_model  # Store the result for later use
             
             result = theoretical_model["total"]
+
+            self.contini_ax.clear()
+            self.contini_ax.set_title("Contini - Reflectance")
+            self.contini_ax.set_xlabel("Time Bin")
+            self.contini_ax.set_ylabel("Value")
+            self.contini_ax.plot(result[0][0], label="Reflectance")
+            self.contini_ax.legend()
+            self.contini_canvas.draw()
+
             if not self.save_to_csv.get():
                 # plot both result[0][0] and result[1][0] as subplots in one figure
                 import matplotlib.pyplot as plt
@@ -334,6 +361,14 @@ class ContiniModelPanel:
                 convolved = convolve_irf_with_model(self.irf, self.contini, geometry=GEOMETRY.REFLECTANCE, offset=0, normalize_irf=True, normalize_model=True, denest_contini_output=True)
             
             self.convolved = convolved  # Store the convolved result for later use
+            #update the convolved plot
+            self.convolved_ax.clear()
+            self.convolved_ax.set_title("Convolved Result (Reflectance)")
+            self.convolved_ax.set_xlabel("Time Bin")
+            self.convolved_ax.set_ylabel("Value")
+            self.convolved_ax.plot(convolved, color='green')
+            self.convolved_canvas.draw()
+
             if not self.save_to_csv.get():
                 #plot the convolved result
                 import matplotlib.pyplot as plt
@@ -368,16 +403,14 @@ class ContiniModelPanel:
                     self.irf = [float(value) for value in row]
                     break  # Only read the first line
 
-            # messagebox.showinfo("IRF Loaded", f"IRF loaded with {len(self.irf)} time bins.")
+                # Update the IRF plot
+                self.irf_ax.clear()
+                self.irf_ax.set_title("IRF")
+                self.irf_ax.set_xlabel("Time Bin")
+                self.irf_ax.set_ylabel("Value")
+                self.irf_ax.plot(range(len(self.irf)), self.irf, color='blue')
+                self.irf_canvas.draw()
             print("IRF Loaded", f"IRF loaded with {len(self.irf)} time bins.")
-            # import matplotlib.pyplot as plt
-            # plt.figure(figsize=(8, 4))
-            # plt.plot(self.irf)
-            # plt.title("Loaded IRF")
-            # plt.xlabel("Time Bin")
-            # plt.ylabel("IRF Value")
-            # plt.tight_layout()
-            # plt.show()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load IRF: {e}")
 
@@ -387,6 +420,7 @@ class ContiniModelPanel:
 
 
 if __name__ == '__main__':
+    pass
     root = tk.Tk()
     root.title("Contini1997 Model Panel")
     panel = ContiniModelPanel(root)

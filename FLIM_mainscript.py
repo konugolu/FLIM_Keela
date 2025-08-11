@@ -730,11 +730,11 @@ class LifetimeFittingGUI:
 
 
 # -------------- TMF8828 Raspberry Pi Class --------------
-#TODO: options to save the meas curve
+#TODO: options to save the meas curve                       DONE
 #TODO: options to save the fitted curve
-#TODO: option to take 1 measurement and save as irf
-#TODO: live mua musp, 
-#TODO: smart crop, 80% 1%
+#TODO: option to take 1 measurement and save as irf         
+#TODO: live mua musp,                                       DONE
+#TODO: smart crop, 80% 1%                                   DONE
 class TMF8828RaspberryPiGUI:
     def __init__(self, root):
         self.root = root
@@ -765,14 +765,6 @@ class TMF8828RaspberryPiGUI:
         # top right corner
         self.graph_frame = tk.LabelFrame(self.right_frame, text="Graph", padx=5, pady=5, bg="white")
         self.graph_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        
-        
-
-        self.start_reader_button = tk.Button(self.control_frame, text="Connect", command=self.start_reader)
-        self.start_reader_button.grid(row=6, column=0, padx=5, pady=5)
-
-        self.toggle_measurement_button = tk.Button(self.control_frame, text="Toggle Measurement", command=self.reader.toggle_measurement, state=tk.DISABLED)
-        self.toggle_measurement_button.grid(row=6, column=1, padx=5, pady=5)
 
 
         self.build_control_panel()
@@ -809,11 +801,6 @@ class TMF8828RaspberryPiGUI:
         self.canvas.get_tk_widget().grid(row=1, column=0, padx=5, pady=5)
 
         self.update_plot()
-
-    def start_reader(self):
-        self.reader.start()
-        self.start_reader_button.config(state=tk.DISABLED)
-        self.toggle_measurement_button.config(state=tk.NORMAL)
 
     def start_fitting_worker(self):
         if not self.contini_model_panel.get_irf():
@@ -1003,7 +990,7 @@ class TMF8828RaspberryPiGUI:
     These methods handle the creation, destruction, and management of the control frame.
     """
     def build_control_panel(self):
-        meas_settings_frame = tk.LabelFrame(self.control_frame, text="Measuremnet Settings", padx=5, pady=5, bg="white")
+        meas_settings_frame = tk.LabelFrame(self.control_frame, text="Measurement Settings", padx=5, pady=5, bg="white")
         meas_settings_frame.grid(row=0, column=0, rowspan=6,columnspan=3, padx=5, pady=5)
 
         # Iterations
@@ -1035,8 +1022,36 @@ class TMF8828RaspberryPiGUI:
         self.histogram_mode_var = tk.IntVar()
         tk.Entry(meas_settings_frame, textvariable=self.histogram_mode_var, width=10).grid(row=4, column=1)
         tk.Button(meas_settings_frame, text="Set", command=self.set_histogram_mode).grid(row=4, column=2)
+        
+        # ROW 6: Start Reader and Toggle Measurement buttons and take one measurement button
+        self.start_reader_button = tk.Button(self.control_frame, text="Connect", command=self.start_reader)
+        self.start_reader_button.grid(row=6, column=0, padx=5, pady=5)   
+        self.toggle_measurement_button = tk.Button(self.control_frame, text="Toggle Measurement", command=self.reader.toggle_measurement, state=tk.DISABLED)
+        self.toggle_measurement_button.grid(row=6, column=1, padx=5, pady=5)
 
-        tk.Button(self.control_frame, text="Start Live Fitting", command=self.start_fitting_worker).grid(row=7, column=0, padx=5, pady=5)
+        # ROW 7: File selection and saving options and start live fitting button
+        self.file_path_var = tk.StringVar()
+        self.file_path_var.set("No file selected")
+        self.file_path_label = tk.Label(self.control_frame, textvariable=self.file_path_var, bg="white")
+        self.file_path_label.grid(row=7, column=0, padx=5, pady=5, sticky="w")
+        self.file_path_button = tk.Button(self.control_frame, text="Select File", command=self.select_file)
+        self.file_path_button.grid(row=7, column=1, padx=5, pady=5)
+        self.save_meas_checkbox = tk.Checkbutton(self.control_frame, text="Save Measurement to CSV", bg="white", command=self.reader.toggle_saving_to_csv)
+        self.save_meas_checkbox.grid(row=7, column=2, padx=5, pady=5)
+        tk.Button(self.control_frame, text="Start Live Fitting", command=self.start_fitting_worker).grid(row=7, column=3, padx=5, pady=5)
+    
+    def start_reader(self):
+            self.reader.start()
+            self.start_reader_button.config(state=tk.DISABLED)
+            self.toggle_measurement_button.config(state=tk.NORMAL)
+
+    def select_file(self):
+        file_path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
+        if file_path:
+            self.file_path_var.set(os.path.basename(file_path))
+            self.reader.set_file_path(file_path)
+        else:
+            self.file_path_var.set("No file selected")
 
     def set_iterations(self):
         value = self.iterations_var.get()
@@ -1088,8 +1103,8 @@ class MainApp:
         LifetimeFittingGUI(self.lifetime_tab)
         TMF8828RaspberryPiGUI(self.tmf8828_rasp_tab)
 
-
-#Run app
-root = tk.Tk()
-app = MainApp(root)
-root.mainloop()
+if __name__ == "__main__":
+    #Run app
+    root = tk.Tk()
+    app = MainApp(root)
+    root.mainloop()
