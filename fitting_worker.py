@@ -88,3 +88,4 @@ class FittingWorker(threading.Thread):
 
     def stop(self):
         self.running = False
+
