@@ -43,6 +43,7 @@ def Contini1997(rho,t,s,mua,musp,n1,n2,phantom,mua_independent,m):
     # Conversion of quantities into SI units and conversion to known types
     rho  = np.array([float(r)*1e-3 for r in rho]) if isinstance(rho, list) else np.array([float(rho)*1e-3])
     t    = np.array([float(tt)*1e-9 for tt in t])
+    t[0] = 1e-15  # set to a very small value above 0 to avoid division by zero
     s    = float(s)   *1e-3
     mua  = float(mua) *1e+3
     musp = float(musp)*1e+3
@@ -62,10 +63,9 @@ def Contini1997(rho,t,s,mua,musp,n1,n2,phantom,mua_independent,m):
         if not m:
             m=200
     elif phantom == Phantom.SEMIINF:
-        if m != 0:
-            logging.warning(f'Non-infinite number of positive or negative sources ({m}) specified for semi-infinite model')
+        # if m != 0:
+        #     logging.warning(f'Non-infinite number of positive or negative sources ({m}) specified for semi-infinite model')
         m=0
-    print("m: ", m)
     # Max acceptable error on computed data
     error=1e-6
 
